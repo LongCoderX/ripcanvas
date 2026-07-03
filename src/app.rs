@@ -456,6 +456,14 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
 fn sync_state_to_ui(window: &AppWindow, state: &AppState) {
     window.set_has_open_file(state.current_path.is_some());
     window.set_has_recent_file(state.recent_path.is_some());
+    window.set_current_file_name(SharedString::from(
+        state
+            .current_path
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .and_then(std::ffi::OsStr::to_str)
+            .unwrap_or("No canvas"),
+    ));
     window.set_current_file_path(SharedString::from(
         state
             .current_path
@@ -478,6 +486,30 @@ fn set_status(window: &AppWindow, kind: &str, label: &str, operation: impl Into<
     window.set_status_label(SharedString::from(label));
     window.set_status_text(SharedString::from(operation.clone()));
     window.set_operation_text(SharedString::from(operation));
+    if kind == "success" {
+        schedule_success_status_settle(window, label);
+    }
+}
+
+fn schedule_success_status_settle(window: &AppWindow, expected_label: &str) {
+    let weak = window.as_weak();
+    let expected_label = expected_label.to_owned();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(1800));
+        let _ = weak.upgrade_in_event_loop(move |window| {
+            if window.get_status_kind().as_str() == "success"
+                && window.get_status_label().as_str() == expected_label
+            {
+                if window.get_has_open_file() {
+                    window.set_status_kind(SharedString::from("idle"));
+                    window.set_status_label(SharedString::from("Watching"));
+                } else {
+                    window.set_status_kind(SharedString::from("idle"));
+                    window.set_status_label(SharedString::from("Idle"));
+                }
+            }
+        });
+    });
 }
 
 fn short_error(error: &anyhow::Error) -> String {

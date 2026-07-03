@@ -280,6 +280,7 @@ export component AppWindow inherits Window {
     in property <string> status-kind: "idle";
     in property <string> status-label: "Idle";
     in property <string> current-file-path: "No canvas";
+    in property <string> current-file-name: "No canvas";
     in property <string> operation-text: "";
     in property <float> canvas-width: 960;
     in property <float> canvas-height: 640;
@@ -413,69 +414,59 @@ export component AppWindow inherits Window {
             background: #fbfdfb;
             border-width: 0px;
 
-            HorizontalLayout {
-                padding-left: 18px;
-                padding-right: 16px;
-                spacing: 14px;
-                alignment: center;
+            Rectangle {
+                x: 18px;
+                y: 13px;
+                width: 38px;
+                height: 38px;
+                border-radius: 8px;
+                background: #ffffff;
+                border-width: 1px;
+                border-color: #d5e0da;
+                clip: true;
 
-                HorizontalLayout {
-                    width: 252px;
-                    height: 48px;
-                    spacing: 12px;
-                    alignment: center;
-
-                    Rectangle {
-                        width: 38px;
-                        height: 38px;
-                        border-radius: 8px;
-                        background: #ffffff;
-                        border-width: 1px;
-                        border-color: #d5e0da;
-                        clip: true;
-
-                        Image {
-                            x: 5px;
-                            y: 5px;
-                            width: 28px;
-                            height: 28px;
-                            source: @image-url("../assets/icon.png");
-                        }
-                    }
-
-                    VerticalLayout {
-                        spacing: 1px;
-                        alignment: center;
-
-                        Text {
-                            text: "RipCanvas";
-                            color: #17231e;
-                            font-size: 20px;
-                            font-weight: 850;
-                            vertical-alignment: center;
-                        }
-
-                        Text {
-                            text: root.node-count + " nodes  /  " + root.edge-count + " edges";
-                            color: #6b7a72;
-                            font-size: 11px;
-                            font-weight: 500;
-                            vertical-alignment: center;
-                        }
-                    }
+                Image {
+                    x: 5px;
+                    y: 5px;
+                    width: 28px;
+                    height: 28px;
+                    source: @image-url("../assets/icon.png");
                 }
+            }
 
-                ToolbarDivider { }
+            Text {
+                x: 68px;
+                y: 16px;
+                width: 120px;
+                height: 32px;
+                text: "RipCanvas";
+                color: #17231e;
+                font-size: 20px;
+                font-weight: 850;
+                vertical-alignment: center;
+            }
 
-                ToolButton {
-                    icon: @image-url("../assets/icons/file-menu.svg");
-                    label: "File";
-                    width: 92px;
-                    primary: root.file-menu-open;
-                    clicked => { root.file-menu-open = !root.file-menu-open; }
-                }
+            ToolbarDivider {
+                x: 198px;
+                y: 17px;
+            }
 
-                Rectangle { }
+            ToolButton {
+                x: 214px;
+                y: 13px;
+                icon: @image-url("../assets/icons/file-menu.svg");
+                label: "File";
+                width: 92px;
+                primary: root.file-menu-open;
+                clicked => { root.file-menu-open = !root.file-menu-open; }
+            }
+
+            Rectangle {
+                x: 0px;
+                y: parent.height - 1px;
+                width: parent.width;
+                height: 1px;
+                background: #dfe8e2;
             }
         }
 
@@ -520,40 +511,6 @@ export component AppWindow inherits Window {
                     border-width: 1px;
                     border-color: #c9d7d0;
 
-                    if root.nodes.length == 0: Rectangle {
-                        x: 42px;
-                        y: 42px;
-                        width: 360px;
-                        height: 148px;
-                        background: #ffffff;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: #d5e0da;
-
-                        Text { x: 20px; y: 20px; text: "No canvas loaded"; color: #17231e; font-size: 20px; font-weight: 800; }
-                        Text { x: 20px; y: 54px; width: parent.width - 40px; text: "Open a Canvas file to start."; color: #617168; font-size: 13px; wrap: word-wrap; }
-
-                        ToolButton {
-                            x: 20px;
-                            y: 92px;
-                            width: 124px;
-                            icon: @image-url("../assets/icons/open.svg");
-                            label: "Open Canvas";
-                            primary: true;
-                            clicked => { root.request-open-file(); }
-                        }
-
-                        ToolButton {
-                            x: 154px;
-                            y: 92px;
-                            width: 124px;
-                            icon: @image-url("../assets/icons/history.svg");
-                            label: "Recent";
-                            enabled: root.has-recent-file;
-                            clicked => { root.request-open-recent(); }
-                        }
-                    }
-
                     for node[i] in root.nodes: Rectangle {
                         visible: node.is_group;
                         property <bool> selected: root.selected-index == i;
@@ -563,12 +520,13 @@ export component AppWindow inherits Window {
                         height: node.height * root.zoom * 1px;
                         border-radius: 7px;
                         border-width: self.selected ? 2px : 1px;
-                        border-color: self.selected ? #25312bcc : #cfdad5;
+                        border-color: self.selected ? #25312bcc : #d8e2ddaa;
                         background: node.color;
-                        drop-shadow-color: self.selected ? #11181666 : #17231e1a;
-                        drop-shadow-blur: self.selected ? 22px : 8px;
+                        opacity: self.selected ? 1.0 : 0.62;
+                        drop-shadow-color: self.selected ? #11181666 : #17231e10;
+                        drop-shadow-blur: self.selected ? 22px : 5px;
                         drop-shadow-offset-x: 0px;
-                        drop-shadow-offset-y: self.selected ? 10px : 3px;
+                        drop-shadow-offset-y: self.selected ? 10px : 2px;
                         drop-shadow-spread: 0px;
                         Rectangle {
                             visible: !root.show-node-titles || node.title == "";
@@ -587,7 +545,7 @@ export component AppWindow inherits Window {
                             width: parent.width;
                             height: Math.max(28.0, 42.0 * root.zoom) * 1px;
                             border-radius: 7px;
-                            background: #ffffff5f;
+                            background: #ffffff3e;
 
                             Text {
                                 x: 14px * root.zoom;
@@ -595,8 +553,8 @@ export component AppWindow inherits Window {
                                 height: parent.height;
                                 text: node.title;
                                 color: node.text_color;
-                                font-size: Math.max(11.0, 14.0 * root.zoom) * 1px;
-                                font-weight: 800;
+                                font-size: Math.max(10.0, 12.0 * root.zoom) * 1px;
+                                font-weight: 750;
                                 overflow: elide;
                                 vertical-alignment: center;
                             }
@@ -922,6 +880,44 @@ export component AppWindow inherits Window {
                     }
                 }
 
+                if root.nodes.length == 0: Rectangle {
+                    x: Math.max(24.0, parent.width / 2.0 / 1px - 180.0) * 1px;
+                    y: Math.max(24.0, parent.height / 2.0 / 1px - 82.0) * 1px;
+                    width: 360px;
+                    height: 164px;
+                    background: #fbfdfcf4;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: #c8d8d0;
+                    drop-shadow-color: #17231e18;
+                    drop-shadow-blur: 16px;
+                    drop-shadow-offset-x: 0px;
+                    drop-shadow-offset-y: 7px;
+
+                    Text { x: 20px; y: 20px; text: "No canvas loaded"; color: #17231e; font-size: 20px; font-weight: 800; }
+                    Text { x: 20px; y: 54px; width: parent.width - 40px; text: "Open a Canvas file to start."; color: #617168; font-size: 13px; wrap: word-wrap; }
+
+                    ToolButton {
+                        x: 20px;
+                        y: 104px;
+                        width: 124px;
+                        icon: @image-url("../assets/icons/open.svg");
+                        label: "Open Canvas";
+                        primary: true;
+                        clicked => { root.request-open-file(); }
+                    }
+
+                    ToolButton {
+                        x: 154px;
+                        y: 104px;
+                        width: 124px;
+                        icon: @image-url("../assets/icons/history.svg");
+                        label: "Recent";
+                        enabled: root.has-recent-file;
+                        clicked => { root.request-open-recent(); }
+                    }
+                }
+
                 Rectangle {
                     x: 14px;
                     y: 14px;
@@ -1134,6 +1130,67 @@ export component AppWindow inherits Window {
                         wrap: word-wrap;
                     }
 
+                    if root.selected-index < 0: Rectangle {
+                        height: 118px;
+                        border-radius: 8px;
+                        background: #f3f7f5;
+                        border-width: 1px;
+                        border-color: #dce7e1;
+
+                        Text {
+                            x: 12px;
+                            y: 10px;
+                            text: "CURRENT CANVAS";
+                            color: #718078;
+                            font-size: 10px;
+                            font-weight: 800;
+                        }
+
+                        Text {
+                            x: 12px;
+                            y: 32px;
+                            width: parent.width - 24px;
+                            text: root.current-file-name;
+                            color: #17231e;
+                            font-size: 13px;
+                            font-weight: 800;
+                            overflow: elide;
+                        }
+
+                        Text {
+                            x: 12px;
+                            y: 55px;
+                            width: parent.width - 24px;
+                            text: root.node-count + " nodes  /  " + root.edge-count + " edges";
+                            color: #66766f;
+                            font-size: 12px;
+                            font-weight: 650;
+                            overflow: elide;
+                        }
+
+                        ToolButton {
+                            x: 12px;
+                            y: 78px;
+                            width: 92px;
+                            height: 30px;
+                            icon: @image-url("../assets/icons/open.svg");
+                            label: "Open";
+                            primary: true;
+                            clicked => { root.request-open-file(); }
+                        }
+
+                        ToolButton {
+                            x: 114px;
+                            y: 78px;
+                            width: 92px;
+                            height: 30px;
+                            icon: @image-url("../assets/icons/refresh.svg");
+                            label: "Refresh";
+                            enabled: root.has-open-file;
+                            clicked => { root.request-refresh(); }
+                        }
+                    }
+
                     if root.selected-index >= 0: VerticalLayout {
                         spacing: 10px;
 
@@ -1287,15 +1344,22 @@ export component AppWindow inherits Window {
                                 clicked => { root.copy-selected-node(); }
                             }
 
-                            Rectangle {
+                            ToolButton {
                                 x: 96px;
                                 y: 18px;
-                                width: parent.width - 96px;
+                                width: 72px;
                                 height: 30px;
-                                border-radius: 6px;
-                                background: #eef4f0;
-                                border-width: 1px;
-                                border-color: #dce7e1;
+                                label: "Edit";
+                                enabled: false;
+                            }
+
+                            ToolButton {
+                                x: 176px;
+                                y: 18px;
+                                width: 64px;
+                                height: 30px;
+                                label: "Export";
+                                enabled: false;
                             }
                         }
                     }
@@ -1308,60 +1372,85 @@ export component AppWindow inherits Window {
             background: #fbfdfb;
             border-width: 0px;
 
-            HorizontalLayout {
-                padding-left: 16px;
-                padding-right: 16px;
-                spacing: 12px;
-                alignment: center;
+            StatusPill {
+                x: 16px;
+                y: 6px;
+                label: root.status-label;
+                kind: root.status-kind;
+            }
 
-                StatusPill { label: root.status-label; kind: root.status-kind; }
+            Rectangle {
+                x: 128px;
+                y: 8px;
+                width: 1px;
+                height: 18px;
+                background: #d9e2dd;
+            }
 
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
-                    background: #d9e2dd;
+            Rectangle {
+                x: 144px;
+                y: 3px;
+                width: Math.max(260.0, root.width / 1px - root.inspector-width - 670.0) * 1px;
+                height: 28px;
+
+                Text {
+                    x: 0px;
+                    y: 1px;
+                    width: parent.width;
+                    text: root.current-file-name;
+                    color: #25312b;
+                    font-size: 12px;
+                    font-weight: 750;
+                    overflow: elide;
                 }
 
                 Text {
+                    x: 0px;
+                    y: 15px;
+                    width: parent.width;
                     text: root.current-file-path;
-                    color: #4d5d55;
-                    font-size: 12px;
+                    color: #7a8981;
+                    font-size: 10px;
                     overflow: elide;
-                    vertical-alignment: center;
                 }
+            }
 
-                Rectangle { }
+            Text {
+                x: parent.width - root.inspector-width * 1px - 520px;
+                y: 7px;
+                width: 150px;
+                text: root.node-count + " nodes  /  " + root.edge-count + " edges";
+                color: #64746b;
+                font-size: 12px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
 
-                Text {
-                    text: root.node-count + " nodes  /  " + root.edge-count + " edges";
-                    color: #64746b;
-                    font-size: 12px;
-                    font-weight: 700;
-                    vertical-alignment: center;
-                }
+            Rectangle {
+                x: parent.width - root.inspector-width * 1px - 360px;
+                y: 8px;
+                width: 1px;
+                height: 18px;
+                background: #d9e2dd;
+            }
 
-                Rectangle {
-                    width: 1px;
-                    height: 18px;
-                    background: #d9e2dd;
-                }
-
-                Text {
-                    text: root.operation-text == "" ? root.status-text : root.operation-text;
-                    color: root.status-kind == "error" ? #92332d : (root.status-kind == "warning" ? #76510d : #4d5d55);
-                    font-size: 12px;
-                    font-weight: root.status-kind == "error" ? 750 : 600;
-                    width: 320px;
-                    overflow: elide;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                }
+            Text {
+                x: parent.width - root.inspector-width * 1px - 344px;
+                y: 6px;
+                width: 324px;
+                text: root.operation-text == "" ? root.status-text : root.operation-text;
+                color: root.status-kind == "error" ? #92332d : (root.status-kind == "warning" ? #76510d : #4d5d55);
+                font-size: 12px;
+                font-weight: root.status-kind == "error" ? 750 : 600;
+                overflow: elide;
+                horizontal-alignment: right;
+                vertical-alignment: center;
             }
         }
     }
 
     if root.file-menu-open: Rectangle {
-        x: 292px;
+        x: 214px;
         y: 56px;
         width: 218px;
         height: 190px;
