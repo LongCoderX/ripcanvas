@@ -47,7 +47,6 @@ pub fn run(document: LaunchDocument) -> Result<()> {
 
     let window = AppWindow::new()?;
     window.set_app_font_family(preferred_font_family());
-    window.window().set_maximized(true);
     let state = Rc::new(RefCell::new(AppState::new()));
 
     apply_view_model(&window, view_model);
@@ -84,7 +83,9 @@ pub fn run(document: LaunchDocument) -> Result<()> {
 
     wire_callbacks(&window, Rc::clone(&state));
 
-    window.run()?;
+    window.show()?;
+    window.window().set_maximized(true);
+    slint::run_event_loop()?;
     Ok(())
 }
 

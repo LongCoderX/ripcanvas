@@ -1,6 +1,6 @@
 [package]
 name = "ripcanvas"
-version = "0.1.17"
+version = "0.1.24"
 edition = "2024"
 description = "A fast Rust viewer for Obsidian Canvas"
 license = "MIT"
