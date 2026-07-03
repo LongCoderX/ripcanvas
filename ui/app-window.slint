@@ -410,6 +410,7 @@ export component AppWindow inherits Window {
         spacing: 0px;
 
         Rectangle {
+            width: root.width;
             height: root.header-height * 1px;
             background: #fbfdfb;
             border-width: 0px;
@@ -1131,6 +1132,7 @@ export component AppWindow inherits Window {
                     }
 
                     if root.selected-index < 0: Rectangle {
+                        width: root.inspector-width * 1px - 36px;
                         height: 118px;
                         border-radius: 8px;
                         background: #f3f7f5;
@@ -1368,6 +1370,7 @@ export component AppWindow inherits Window {
         }
 
         Rectangle {
+            width: root.width;
             height: root.footer-height * 1px;
             background: #fbfdfb;
             border-width: 0px;
