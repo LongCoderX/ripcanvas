@@ -17,6 +17,16 @@ export struct UiCanvasNode {
 }
 
 export struct UiCanvasEdge {
+    from_id: string,
+    to_id: string,
+    from_node_x: float,
+    from_node_y: float,
+    from_node_width: float,
+    from_node_height: float,
+    to_node_x: float,
+    to_node_y: float,
+    to_node_width: float,
+    to_node_height: float,
     from_x: float,
     from_y: float,
     control_1_x: float,
@@ -219,10 +229,12 @@ export component AppWindow inherits Window {
     in-out property <bool> minimap-enabled: true;
     in-out property <bool> show-node-titles: true;
     property <bool> file-menu-open: false;
+    property <bool> toolbar-expanded: false;
 
     callback request-open-file;
     callback request-open-recent;
     callback request-refresh;
+    callback request-export-image;
     callback request-copy-text(string);
 
     property <float> zoom: 1.0;
@@ -235,8 +247,9 @@ export component AppWindow inherits Window {
     property <bool> inspector-collapsed: false;
     property <float> inspector-width: root.inspector-collapsed ? 42.0 : 280.0;
     property <float> header-height: 64.0;
+    property <float> footer-height: 30.0;
     property <float> viewport-width: root.width / 1px - root.inspector-width;
-    property <float> viewport-height: root.height / 1px - root.header-height;
+    property <float> viewport-height: root.height / 1px - root.header-height - root.footer-height;
     property <float> ripple-phase: 0.0;
 
     function reset-view() {
@@ -288,12 +301,15 @@ export component AppWindow inherits Window {
             root.request-copy-text(
                 "id: " + root.nodes[root.selected-index].id + "\n"
                 + "type: " + root.nodes[root.selected-index].kind + "\n"
-                + "title: " + root.nodes[root.selected-index].title + "\n"
-                + "label: " + root.nodes[root.selected-index].label + "\n"
+                + "label: " + (root.nodes[root.selected-index].title != "" ? root.nodes[root.selected-index].title : root.nodes[root.selected-index].label) + "\n"
                 + "source: " + root.nodes[root.selected-index].source + "\n"
                 + "geometry: " + root.nodes[root.selected-index].geometry
             );
         }
+    }
+
+    function is-selected-edge(from-id: string, to-id: string) -> bool {
+        root.selected-index >= 0 && (from-id == root.nodes[root.selected-index].id || to-id == root.nodes[root.selected-index].id)
     }
 
     forward-focus: shortcuts;
@@ -301,6 +317,7 @@ export component AppWindow inherits Window {
     shortcuts := FocusScope {
         KeyBinding { keys: @keys(Control + O); activated => { root.request-open-file(); } }
         KeyBinding { keys: @keys(Control + R); activated => { root.request-refresh(); } }
+        KeyBinding { keys: @keys(Control + E); activated => { root.request-export-image(); } }
         KeyBinding { keys: @keys(Control + C); activated => { root.copy-selected-node(); } }
         KeyBinding { keys: @keys(Control + F); activated => { root.fit-view(); } }
         KeyBinding { keys: @keys(Control + "0"); activated => { root.reset-view(); } }
@@ -323,19 +340,18 @@ export component AppWindow inherits Window {
             border-width: 0px;
 
             HorizontalLayout {
-                padding-left: 16px;
+                padding-left: 18px;
                 padding-right: 16px;
-                spacing: 12px;
+                spacing: 14px;
                 alignment: center;
 
-                Rectangle {
-                    width: 250px;
+                HorizontalLayout {
+                    width: 252px;
                     height: 48px;
-                    background: transparent;
+                    spacing: 12px;
+                    alignment: center;
 
                     Rectangle {
-                        x: 0px;
-                        y: 5px;
                         width: 38px;
                         height: 38px;
                         border-radius: 8px;
@@ -353,22 +369,25 @@ export component AppWindow inherits Window {
                         }
                     }
 
-                    Text {
-                        x: 50px;
-                        y: 3px;
-                        text: "RipCanvas";
-                        color: #17231e;
-                        font-size: 20px;
-                        font-weight: 850;
-                    }
+                    VerticalLayout {
+                        spacing: 1px;
+                        alignment: center;
 
-                    Text {
-                        x: 50px;
-                        y: 30px;
-                        text: root.node-count + " nodes  /  " + root.edge-count + " edges";
-                        color: #6b7a72;
-                        font-size: 11px;
-                        font-weight: 500;
+                        Text {
+                            text: "RipCanvas";
+                            color: #17231e;
+                            font-size: 20px;
+                            font-weight: 850;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: root.node-count + " nodes  /  " + root.edge-count + " edges";
+                            color: #6b7a72;
+                            font-size: 11px;
+                            font-weight: 500;
+                            vertical-alignment: center;
+                        }
                     }
                 }
 
@@ -383,16 +402,6 @@ export component AppWindow inherits Window {
                 }
 
                 Rectangle { }
-
-                Text {
-                    text: root.status-text;
-                    color: #596a61;
-                    font-size: 12px;
-                    width: 430px;
-                    overflow: elide;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                }
             }
         }
 
@@ -453,18 +462,19 @@ export component AppWindow inherits Window {
 
                     for node[i] in root.nodes: Rectangle {
                         visible: node.is_group;
+                        property <bool> selected: root.selected-index == i;
                         x: node.x * root.zoom * 1px;
                         y: node.y * root.zoom * 1px;
                         width: node.width * root.zoom * 1px;
                         height: node.height * root.zoom * 1px;
                         border-radius: 7px;
-                        border-width: 1px;
-                        border-color: #bac9c2;
+                        border-width: self.selected ? 2px : 1px;
+                        border-color: self.selected ? #25312bcc : #bac9c2;
                         background: node.color;
-                        drop-shadow-color: root.selected-index == i ? #11181666 : #17231e2f;
-                        drop-shadow-blur: root.selected-index == i ? 22px : 12px;
+                        drop-shadow-color: self.selected ? #11181666 : #17231e2f;
+                        drop-shadow-blur: self.selected ? 22px : 12px;
                         drop-shadow-offset-x: 0px;
-                        drop-shadow-offset-y: root.selected-index == i ? 10px : 5px;
+                        drop-shadow-offset-y: self.selected ? 10px : 5px;
                         drop-shadow-spread: 0px;
                         Rectangle {
                             visible: !root.show-node-titles || node.title == "";
@@ -481,17 +491,17 @@ export component AppWindow inherits Window {
                             x: 0px;
                             y: 0px;
                             width: parent.width;
-                            height: Math.max(14.0, 28.0 * root.zoom) * 1px;
+                            height: Math.max(28.0, 42.0 * root.zoom) * 1px;
                             border-radius: 7px;
                             background: #ffffff5f;
 
                             Text {
-                                x: 10px * root.zoom;
-                                width: parent.width - 20px * root.zoom;
+                                x: 14px * root.zoom;
+                                width: parent.width - 28px * root.zoom;
                                 height: parent.height;
                                 text: node.title;
                                 color: node.text_color;
-                                font-size: Math.max(9.0, 12.0 * root.zoom) * 1px;
+                                font-size: Math.max(11.0, 14.0 * root.zoom) * 1px;
                                 font-weight: 800;
                                 overflow: elide;
                                 vertical-alignment: center;
@@ -500,9 +510,9 @@ export component AppWindow inherits Window {
 
                         if node.kind == "text": StyledText {
                             x: 12px * root.zoom;
-                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(28.0, 42.0 * root.zoom) : 0.0)) * 1px;
                             width: parent.width - 24px * root.zoom;
-                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(28.0, 42.0 * root.zoom) : 0.0)) * 1px;
                             text: node.markdown;
                             default-color: node.text_color;
                             link-color: #1559c7;
@@ -511,9 +521,9 @@ export component AppWindow inherits Window {
 
                         if node.kind != "text" && node.label != "": Text {
                             x: 12px * root.zoom;
-                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(28.0, 42.0 * root.zoom) : 0.0)) * 1px;
                             width: parent.width - 24px * root.zoom;
-                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(28.0, 42.0 * root.zoom) : 0.0)) * 1px;
                             text: node.label;
                             color: node.text_color;
                             font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
@@ -528,7 +538,8 @@ export component AppWindow inherits Window {
                             width: parent.width;
                             height: parent.height;
                             border-radius: 7px;
-                            border-width: 0px;
+                            border-width: 2px;
+                            border-color: #17231ed0;
                             background: #2f3a3526;
                         }
 
@@ -553,13 +564,14 @@ export component AppWindow inherits Window {
                     }
 
                     for edge in root.edges: Path {
+                        property <bool> selected: root.is-selected-edge(edge.from_id, edge.to_id);
                         width: parent.width;
                         height: parent.height;
                         viewbox-width: root.canvas-width * root.zoom;
                         viewbox-height: root.canvas-height * root.zoom;
                         stroke: #17231e;
-                        stroke-width: 7px;
-                        opacity: 0.14;
+                        stroke-width: self.selected ? 11px : 7px;
+                        opacity: self.selected ? 0.24 : 0.14;
                         fill: transparent;
 
                         MoveTo { x: edge.from_x * root.zoom; y: edge.from_y * root.zoom + 3.0; }
@@ -574,12 +586,14 @@ export component AppWindow inherits Window {
                     }
 
                     for edge in root.edges: Path {
+                        property <bool> selected: root.is-selected-edge(edge.from_id, edge.to_id);
                         width: parent.width;
                         height: parent.height;
                         viewbox-width: root.canvas-width * root.zoom;
                         viewbox-height: root.canvas-height * root.zoom;
                         stroke: root.edge-gradient-enabled ? @linear-gradient(90deg, edge.from_color, edge.to_color) : #7d978d;
-                        stroke-width: 3px;
+                        stroke-width: self.selected ? 5px : 3px;
+                        opacity: root.selected-index < 0 || self.selected ? 1.0 : 0.5;
                         fill: transparent;
 
                         MoveTo { x: edge.from_x * root.zoom; y: edge.from_y * root.zoom; }
@@ -594,29 +608,34 @@ export component AppWindow inherits Window {
                     }
 
                     for edge in root.edges: Rectangle {
-                        x: edge.from_x * root.zoom * 1px - 5px;
-                        y: edge.from_y * root.zoom * 1px - 5px;
-                        width: 10px;
-                        height: 10px;
-                        border-radius: 5px;
+                        property <bool> selected: root.is-selected-edge(edge.from_id, edge.to_id);
+                        x: edge.from_x * root.zoom * 1px - (self.selected ? 7px : 5px);
+                        y: edge.from_y * root.zoom * 1px - (self.selected ? 7px : 5px);
+                        width: self.selected ? 14px : 10px;
+                        height: self.selected ? 14px : 10px;
+                        border-radius: self.selected ? 7px : 5px;
                         background: edge.from_color;
                         border-width: 2px;
                         border-color: #ffffff;
+                        opacity: root.selected-index < 0 || self.selected ? 1.0 : 0.55;
                     }
 
                     for edge in root.edges: Rectangle {
-                        x: edge.to_x * root.zoom * 1px - 5px;
-                        y: edge.to_y * root.zoom * 1px - 5px;
-                        width: 10px;
-                        height: 10px;
-                        border-radius: 5px;
+                        property <bool> selected: root.is-selected-edge(edge.from_id, edge.to_id);
+                        x: edge.to_x * root.zoom * 1px - (self.selected ? 7px : 5px);
+                        y: edge.to_y * root.zoom * 1px - (self.selected ? 7px : 5px);
+                        width: self.selected ? 14px : 10px;
+                        height: self.selected ? 14px : 10px;
+                        border-radius: self.selected ? 7px : 5px;
                         background: edge.to_color;
                         border-width: 2px;
                         border-color: #ffffff;
+                        opacity: root.selected-index < 0 || self.selected ? 1.0 : 0.55;
                     }
 
                     for edge in root.edges: Rectangle {
-                        visible: root.edge-ripple-enabled;
+                        property <bool> selected: root.is-selected-edge(edge.from_id, edge.to_id);
+                        visible: root.edge-ripple-enabled && (root.selected-index < 0 || self.selected);
                         property <float> t: root.ripple-phase;
                         property <float> omt: 1.0 - self.t;
                         property <float> ripple-x: self.omt * self.omt * self.omt * edge.from_x + 3.0 * self.omt * self.omt * self.t * edge.control_1_x + 3.0 * self.omt * self.t * self.t * edge.control_2_x + self.t * self.t * self.t * edge.to_x;
@@ -633,18 +652,19 @@ export component AppWindow inherits Window {
 
                     for node[i] in root.nodes: Rectangle {
                         visible: !node.is_group;
+                        property <bool> selected: root.selected-index == i;
                         x: node.x * root.zoom * 1px;
                         y: node.y * root.zoom * 1px;
                         width: node.width * root.zoom * 1px;
                         height: node.height * root.zoom * 1px;
                         border-radius: 7px;
-                        border-width: 1px;
-                        border-color: #bac9c2;
+                        border-width: self.selected ? 2px : 1px;
+                        border-color: self.selected ? #25312bcc : #bac9c2;
                         background: node.color;
-                        drop-shadow-color: root.selected-index == i ? #11181666 : #17231e2f;
-                        drop-shadow-blur: root.selected-index == i ? 22px : 12px;
+                        drop-shadow-color: self.selected ? #11181666 : #17231e2f;
+                        drop-shadow-blur: self.selected ? 22px : 12px;
                         drop-shadow-offset-x: 0px;
-                        drop-shadow-offset-y: root.selected-index == i ? 10px : 5px;
+                        drop-shadow-offset-y: self.selected ? 10px : 5px;
                         drop-shadow-spread: 0px;
                         Rectangle {
                             visible: !root.show-node-titles || node.title == "";
@@ -708,7 +728,8 @@ export component AppWindow inherits Window {
                             width: parent.width;
                             height: parent.height;
                             border-radius: 7px;
-                            border-width: 0px;
+                            border-width: 2px;
+                            border-color: #17231ed0;
                             background: #2f3a3526;
                         }
 
@@ -731,13 +752,45 @@ export component AppWindow inherits Window {
                             }
                         }
                     }
+
+                    for edge in root.edges: Rectangle {
+                        visible: root.is-selected-edge(edge.from_id, edge.to_id);
+                        x: edge.from_node_x * root.zoom * 1px;
+                        y: edge.from_node_y * root.zoom * 1px;
+                        width: edge.from_node_width * root.zoom * 1px;
+                        height: edge.from_node_height * root.zoom * 1px;
+                        border-radius: 7px;
+                        border-width: 2px;
+                        border-color: #50645ccc;
+                        background: #ffffff1a;
+                        drop-shadow-color: #17231e33;
+                        drop-shadow-blur: 18px;
+                        drop-shadow-offset-x: 0px;
+                        drop-shadow-offset-y: 7px;
+                    }
+
+                    for edge in root.edges: Rectangle {
+                        visible: root.is-selected-edge(edge.from_id, edge.to_id);
+                        x: edge.to_node_x * root.zoom * 1px;
+                        y: edge.to_node_y * root.zoom * 1px;
+                        width: edge.to_node_width * root.zoom * 1px;
+                        height: edge.to_node_height * root.zoom * 1px;
+                        border-radius: 7px;
+                        border-width: 2px;
+                        border-color: #50645ccc;
+                        background: #ffffff1a;
+                        drop-shadow-color: #17231e33;
+                        drop-shadow-blur: 18px;
+                        drop-shadow-offset-x: 0px;
+                        drop-shadow-offset-y: 7px;
+                    }
                 }
 
                 Rectangle {
                     x: 14px;
                     y: 14px;
                     width: 52px;
-                    height: 362px;
+                    height: root.toolbar-expanded ? 492px : 52px;
                     border-radius: 10px;
                     background: #fbfdfcf0;
                     border-width: 1px;
@@ -752,57 +805,72 @@ export component AppWindow inherits Window {
                         spacing: 6px;
 
                         FloatingToolButton {
+                            icon: @image-url("../assets/icons/tools.svg");
+                            tooltip: root.toolbar-expanded ? "Collapse Tools" : "Expand Tools";
+                            active: root.toolbar-expanded;
+                            clicked => { root.toolbar-expanded = !root.toolbar-expanded; }
+                        }
+
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/minus.svg");
                             tooltip: "Zoom Out";
                             clicked => { root.zoom-out(); }
                         }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/plus.svg");
                             tooltip: "Zoom In";
                             clicked => { root.zoom-in(); }
                         }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/fit.svg");
                             tooltip: "Fit View";
                             clicked => { root.fit-view(); }
                         }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/reset.svg");
                             tooltip: "Reset 1:1";
                             clicked => { root.reset-view(); }
                         }
 
-                        Rectangle { height: 1px; background: #d7e1dc; }
+                        if root.toolbar-expanded: Rectangle { height: 1px; background: #d7e1dc; }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/title.svg");
                             tooltip: root.show-node-titles ? "Hide Titles" : "Show Titles";
                             active: root.show-node-titles;
                             clicked => { root.show-node-titles = !root.show-node-titles; }
                         }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/gradient.svg");
                             tooltip: root.edge-gradient-enabled ? "Gradient On" : "Gradient Off";
                             active: root.edge-gradient-enabled;
                             clicked => { root.edge-gradient-enabled = !root.edge-gradient-enabled; }
                         }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/wave.svg");
                             tooltip: root.edge-ripple-enabled ? "Wave On" : "Wave Off";
                             active: root.edge-ripple-enabled;
                             clicked => { root.edge-ripple-enabled = !root.edge-ripple-enabled; }
                         }
 
-                        FloatingToolButton {
+                        if root.toolbar-expanded: FloatingToolButton {
                             icon: @image-url("../assets/icons/map.svg");
                             tooltip: root.minimap-enabled ? "Map On" : "Map Off";
                             active: root.minimap-enabled;
                             clicked => { root.minimap-enabled = !root.minimap-enabled; }
+                        }
+
+                        if root.toolbar-expanded: Rectangle { height: 1px; background: #d7e1dc; }
+
+                        if root.toolbar-expanded: FloatingToolButton {
+                            icon: @image-url("../assets/icons/export.svg");
+                            tooltip: "Export PNG";
+                            clicked => { root.request-export-image(); }
                         }
                     }
                 }
@@ -941,12 +1009,47 @@ export component AppWindow inherits Window {
                         ToolButton { label: "Copy"; width: 72px; clicked => { root.copy-selected-node(); } }
                         MetaRow { name: "ID"; value: root.nodes[root.selected-index].id; }
                         MetaRow { name: "TYPE"; value: root.nodes[root.selected-index].kind; }
-                        MetaRow { name: "TITLE"; value: root.nodes[root.selected-index].title; }
-                        MetaRow { name: "LABEL"; value: root.nodes[root.selected-index].label; }
+                        MetaRow { name: "LABEL"; value: root.nodes[root.selected-index].title != "" ? root.nodes[root.selected-index].title : root.nodes[root.selected-index].label; }
                         MetaRow { name: "COLOR" ; value: root.nodes[root.selected-index].color_raw; }
                         MetaRow { name: "SOURCE"; value: root.nodes[root.selected-index].source; }
                         MetaRow { name: "GEOMETRY"; value: root.nodes[root.selected-index].geometry; }
                     }
+                }
+            }
+        }
+
+        Rectangle {
+            height: root.footer-height * 1px;
+            background: #fbfdfb;
+            border-width: 1px;
+            border-color: #d8e4de;
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 10px;
+                alignment: center;
+
+                Text {
+                    text: "Status";
+                    color: #7b8981;
+                    font-size: 11px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+
+                Rectangle {
+                    width: 1px;
+                    height: 18px;
+                    background: #d9e2dd;
+                }
+
+                Text {
+                    text: root.status-text;
+                    color: #4d5d55;
+                    font-size: 12px;
+                    overflow: elide;
+                    vertical-alignment: center;
                 }
             }
         }
@@ -956,7 +1059,7 @@ export component AppWindow inherits Window {
         x: 292px;
         y: 56px;
         width: 218px;
-        height: 146px;
+        height: 190px;
         border-radius: 8px;
         background: #fbfdfcf7;
         border-width: 1px;
@@ -999,6 +1102,17 @@ export component AppWindow inherits Window {
                 clicked => {
                     root.file-menu-open = false;
                     root.request-refresh();
+                }
+            }
+
+            MenuItem {
+                icon: @image-url("../assets/icons/export.svg");
+                label: "Export PNG";
+                hint: "Ctrl+E";
+                enabled: root.has-open-file;
+                clicked => {
+                    root.file-menu-open = false;
+                    root.request-export-image();
                 }
             }
         }

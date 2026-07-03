@@ -1615,6 +1615,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "font8x8"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "875488b8711a968268c7cf5d139578713097ca4635a76044e8fe8eedf831d07e"
+
+[[package]]
 name = "fontconfig-parser"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4491,13 +4497,16 @@ dependencies = [
 
 [[package]]
 name = "ripcanvas"
-version = "0.1.0"
+version = "0.1.13"
 dependencies = [
+ "ab_glyph",
  "anyhow",
  "arboard",
  "assert_cmd",
  "clap",
+ "font8x8",
  "fontdb",
+ "image",
  "notify",
  "predicates",
  "rfd",

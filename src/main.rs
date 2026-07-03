@@ -2,10 +2,18 @@
 
 use anyhow::Result;
 use clap::Parser;
-use ripcanvas::{app, cli::Cli};
+use ripcanvas::{
+    app,
+    cli::{Cli, CliAction},
+};
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let launch = cli.resolve_launch()?;
-    app::run(launch)
+    match cli.run()? {
+        CliAction::Launch(launch) => app::run(launch),
+        CliAction::Export { input, output } => {
+            println!("Exported {} to {}", input.display(), output.display());
+            Ok(())
+        }
+    }
 }

@@ -81,7 +81,17 @@ fn maps_canvas_colors_and_edge_endpoints_into_view_model() {
         view_model.edges[0].from_x,
         view_model.nodes[0].x + view_model.nodes[0].width
     );
+    assert_eq!(
+        view_model.edges[0].from_y,
+        view_model.nodes[0].y + view_model.nodes[0].height / 2.0
+    );
     assert_eq!(view_model.edges[0].to_x, view_model.nodes[1].x);
+    assert_eq!(
+        view_model.edges[0].to_y,
+        view_model.nodes[1].y + view_model.nodes[1].height / 2.0
+    );
+    assert_eq!(view_model.edges[0].from_id, "node-a");
+    assert_eq!(view_model.edges[0].to_id, "node-b");
     assert_eq!(view_model.edges[0].from_color, "#cdebdc");
     assert_eq!(view_model.edges[0].to_color, "#7852ee");
 }

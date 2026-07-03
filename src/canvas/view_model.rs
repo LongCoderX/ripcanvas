@@ -28,6 +28,16 @@ pub struct CanvasNodeView {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanvasEdgeView {
+    pub from_id: String,
+    pub to_id: String,
+    pub from_node_x: f32,
+    pub from_node_y: f32,
+    pub from_node_width: f32,
+    pub from_node_height: f32,
+    pub to_node_x: f32,
+    pub to_node_y: f32,
+    pub to_node_width: f32,
+    pub to_node_height: f32,
     pub from_x: f32,
     pub from_y: f32,
     pub control_1_x: f32,
@@ -162,14 +172,24 @@ impl CanvasViewModel {
         let to_center = center(to);
         let from_side = from_side.unwrap_or_else(|| side_toward(from_center, to_center));
         let to_side = to_side.unwrap_or_else(|| side_toward(to_center, from_center));
-        let (from_x, from_y) = point_on_side(from, from_side, to_center);
-        let (to_x, to_y) = point_on_side(to, to_side, from_center);
+        let (from_x, from_y) = midpoint_on_side(from, from_side);
+        let (to_x, to_y) = midpoint_on_side(to, to_side);
         let (from_dx, from_dy) = side_normal(from_side);
         let (to_dx, to_dy) = side_normal(to_side);
         let distance = ((to_x - from_x).hypot(to_y - from_y)).clamp(80.0, 260.0);
         let pull = distance * 0.42;
 
         CanvasEdgeView {
+            from_id: from.id.clone(),
+            to_id: to.id.clone(),
+            from_node_x: from.x,
+            from_node_y: from.y,
+            from_node_width: from.width,
+            from_node_height: from.height,
+            to_node_x: to.x,
+            to_node_y: to.y,
+            to_node_width: to.width,
+            to_node_height: to.height,
             from_x,
             from_y,
             control_1_x: from_x + from_dx * pull,
@@ -210,16 +230,18 @@ fn side_toward(from: (f32, f32), to: (f32, f32)) -> Side {
     }
 }
 
-fn point_on_side(node: &CanvasNodeView, side: Side, toward: (f32, f32)) -> (f32, f32) {
+fn midpoint_on_side(node: &CanvasNodeView, side: Side) -> (f32, f32) {
     let min_x = node.x;
     let max_x = node.x + node.width;
     let min_y = node.y;
     let max_y = node.y + node.height;
+    let center_x = node.x + node.width / 2.0;
+    let center_y = node.y + node.height / 2.0;
     match side {
-        Side::Top => (toward.0.clamp(min_x, max_x), min_y),
-        Side::Right => (max_x, toward.1.clamp(min_y, max_y)),
-        Side::Bottom => (toward.0.clamp(min_x, max_x), max_y),
-        Side::Left => (min_x, toward.1.clamp(min_y, max_y)),
+        Side::Top => (center_x.clamp(min_x, max_x), min_y),
+        Side::Right => (max_x, center_y.clamp(min_y, max_y)),
+        Side::Bottom => (center_x.clamp(min_x, max_x), max_y),
+        Side::Left => (min_x, center_y.clamp(min_y, max_y)),
     }
 }
 
@@ -318,5 +340,9 @@ mod tests {
 
         assert_eq!(edge.from_x, 110.0);
         assert_eq!(edge.to_x, 240.0);
+        assert_eq!(edge.from_y, 50.0);
+        assert_eq!(edge.to_y, 50.0);
+        assert_eq!(edge.from_id, "a");
+        assert_eq!(edge.to_id, "b");
     }
 }

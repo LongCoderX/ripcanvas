@@ -11,7 +11,7 @@ use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use slint::{Color, ComponentHandle, ModelRc, SharedString, StyledText, VecModel};
 
 use crate::{
-    canvas::{parser::parse_canvas_file, view_model::CanvasViewModel},
+    canvas::{export::export_canvas_png, parser::parse_canvas_file, view_model::CanvasViewModel},
     cli::LaunchDocument,
 };
 
@@ -52,6 +52,7 @@ pub fn run(document: LaunchDocument) -> Result<()> {
 
     let window = AppWindow::new()?;
     window.set_app_font_family(preferred_font_family());
+    window.window().set_maximized(true);
     let state = Rc::new(RefCell::new(AppState::new()));
 
     apply_view_model(&window, view_model, status);
@@ -132,6 +133,35 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
     });
 
     let weak = window.as_weak();
+    let state_for_export = Rc::clone(&state);
+    window.on_request_export_image(move || {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Some(path) = state_for_export.borrow().current_path.clone() else {
+            window.set_status_text(SharedString::from("No canvas to export"));
+            return;
+        };
+        let Some(output) = rfd::FileDialog::new()
+            .add_filter("PNG image", &["png"])
+            .set_file_name(default_export_file_name(&path))
+            .save_file()
+        else {
+            return;
+        };
+
+        match export_canvas_path(&path, &output) {
+            Ok(()) => window.set_status_text(SharedString::from(format!(
+                "Exported image to {}",
+                output.display()
+            ))),
+            Err(error) => {
+                window.set_status_text(SharedString::from(format!("Export failed: {error:#}")));
+            }
+        }
+    });
+
+    let weak = window.as_weak();
     window.on_request_copy_text(move |text| match copy_to_clipboard(text.as_str()) {
         Ok(()) => {
             if let Some(window) = weak.upgrade() {
@@ -169,6 +199,12 @@ fn reload_canvas_path(window: &AppWindow, path: &Path) -> Result<()> {
     Ok(())
 }
 
+fn export_canvas_path(path: &Path, output: &Path) -> Result<()> {
+    let canvas = parse_canvas_file(path)
+        .with_context(|| format!("Failed to load canvas file: {}", path.display()))?;
+    export_canvas_png(&canvas, output)
+}
+
 fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel, status: SharedString) {
     window.set_status_text(status);
     window.set_canvas_width(view_model.width);
@@ -181,6 +217,16 @@ fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel, status: Sha
             .edges
             .into_iter()
             .map(|edge| UiCanvasEdge {
+                from_id: SharedString::from(edge.from_id),
+                to_id: SharedString::from(edge.to_id),
+                from_node_x: edge.from_node_x,
+                from_node_y: edge.from_node_y,
+                from_node_width: edge.from_node_width,
+                from_node_height: edge.from_node_height,
+                to_node_x: edge.to_node_x,
+                to_node_y: edge.to_node_y,
+                to_node_width: edge.to_node_width,
+                to_node_height: edge.to_node_height,
                 from_x: edge.from_x,
                 from_y: edge.from_y,
                 control_1_x: edge.control_1_x,
@@ -382,4 +428,12 @@ fn save_recent_file(path: &Path) {
         let _ = fs::create_dir_all(parent);
     }
     let _ = fs::write(store_path, path.display().to_string());
+}
+
+fn default_export_file_name(path: &Path) -> String {
+    let stem = path
+        .file_stem()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or("canvas");
+    format!("{stem}.png")
 }

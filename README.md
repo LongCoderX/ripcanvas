@@ -1,57 +1,57 @@
 # RipCanvas
 
-RipCanvas is a fast, read-only desktop viewer for Obsidian Canvas files.
+RipCanvas 是一个用于查看 Obsidian Canvas `.canvas` 文件的轻量桌面应用。
 
-The command-line entry point is `rocv`. It is built for workflows where agents,
-scripts, or other tools generate `.canvas` files and you want a lightweight
-viewer open for quick inspection.
+它的命令行入口是 `rocv`。这个项目主要服务于 agent、脚本或其他自动化工具生成 `.canvas` 文件后的快速检查场景：用户可以保持一个独立查看器打开，随时查看画布结构、节点关系和元数据。
 
-## Features
+当前阶段 RipCanvas 以查看体验为主，暂时不做编辑、保存和回写源文件。
 
-- Open `.canvas` files from the command line or the app toolbar.
-- Render Obsidian Canvas nodes, groups, colors, and curved edges.
-- Zoom, pan, fit to view, and reset the viewport.
-- Inspect selected node metadata, including id, type, source, color, and geometry.
-- Copy node identifiers and source labels for prompts or scripts.
-- Reopen the most recent file.
-- Watch the opened file and reload after external changes.
-- Preserve the last good view when refresh parsing fails.
+## 功能
 
-RipCanvas is a viewer, not an editor. It does not save files or mutate canvas
-node positions.
+- 从命令行或应用内文件菜单打开 `.canvas` 文件。
+- 渲染 Obsidian Canvas 节点、分组、颜色和曲线边。
+- 支持缩放、平移、适配视图和重置视图。
+- 支持鼠标滚轮缩放和拖拽平移。
+- 支持小地图查看全局画布位置。
+- 支持选择节点并在 Inspector 中查看 id、类型、标题、标签、来源、颜色和几何信息。
+- 支持复制节点信息，方便粘贴到 prompt、脚本或 issue 中。
+- 支持重新打开最近使用的 Canvas 文件。
+- 支持监听当前文件变化，并在外部修改后自动刷新。
+- 刷新解析失败时保留最后一次成功显示的画布，并在状态栏显示错误。
 
-## Usage
+完整进度记录见 [PROGRESS.md](PROGRESS.md)。
 
-Launch with no file:
+## 使用
+
+无参数启动：
 
 ```powershell
 rocv
 ```
 
-Open a canvas file:
+打开指定 Canvas 文件：
 
 ```powershell
 rocv path\to\architecture.canvas
 ```
 
-Inside the app, use the toolbar to open a file, refresh, reopen the recent file,
-fit the canvas, and inspect nodes.
+在应用内可以通过文件菜单打开文件、打开最近文件、刷新当前文件，也可以使用工具栏控制缩放、适配视图、小地图、边效果和节点标题显示。
 
-## Build From Source
+## 从源码构建
 
-Requirements:
+要求：
 
-- Rust stable with Cargo
-- Windows, macOS, or Linux supported by Slint
+- Rust stable 和 Cargo
+- Windows、macOS 或 Linux，具体取决于 Slint 支持的桌面平台
 
-Build and run:
+构建并运行：
 
 ```powershell
 cargo run --bin rocv
 cargo run --bin rocv -- tests\fixtures\basic.canvas
 ```
 
-Run checks:
+运行检查：
 
 ```powershell
 cargo fmt --all -- --check
@@ -59,15 +59,15 @@ cargo check --all-targets
 cargo test
 ```
 
-## Windows Packaging
+## Windows 打包
 
-Create a portable Windows zip for the current machine's common target:
+生成当前常用目标的便携 zip：
 
 ```powershell
 .\scripts\package-windows.ps1 -ZipOnly
 ```
 
-Create Windows 11 packages for supported architectures:
+生成不同架构的 Windows 11 便携包：
 
 ```powershell
 .\scripts\package-windows.ps1 -ZipOnly -Arch x64
@@ -75,55 +75,21 @@ Create Windows 11 packages for supported architectures:
 .\scripts\package-windows.ps1 -ZipOnly -Arch arm
 ```
 
-Create the configured installer package with `cargo-packager`:
+使用 `cargo-packager` 生成安装包：
 
 ```powershell
 cargo install cargo-packager --locked
 .\scripts\package-windows.ps1
 ```
 
-Generated packages are written under `dist/`.
+生成的包会输出到 `dist/` 目录。
 
-## CI/CD
+## 许可证
 
-GitHub Actions runs on `master`, pull requests to `master`, tags matching `v*`,
-and manual dispatches.
+RipCanvas 使用 MIT License。详见 [LICENSE](LICENSE)。
 
-The workflow:
+## English Summary
 
-- validates formatting, compilation, and tests;
-- creates source archives as `.zip` and `.tar.gz`;
-- builds Windows 11 portable packages for `x64`, `x86`, and `arm`;
-- publishes a GitHub Release automatically for tags like `v0.1.0`.
-
-Release artifacts are named:
-
-```text
-ripcanvas-source-<version>.zip
-ripcanvas-source-<version>.tar.gz
-ripcanvas-windows11-x64-<version>.zip
-ripcanvas-windows11-x86-<version>.zip
-ripcanvas-windows11-arm-<version>.zip
-```
-
-## Project Layout
-
-```text
-src/
-  main.rs                 Binary entry point for rocv.
-  cli.rs                  CLI argument parsing and path validation.
-  app.rs                  Slint app startup, UI binding, refresh, recent file, and clipboard logic.
-  canvas/                 Obsidian Canvas model, parser, and view-model mapping.
-ui/
-  app-window.slint        Main desktop UI.
-tests/
-  fixtures/               Sample .canvas files.
-scripts/
-  package-windows.ps1     Windows packaging helper.
-assets/
-  icon and toolbar assets.
-```
-
-## License
-
-RipCanvas is available under the MIT License. See [LICENSE](LICENSE).
+RipCanvas is a lightweight desktop viewer for Obsidian Canvas `.canvas` files.
+It is designed for workflows where agents, scripts, or other tools generate
+canvas documents and users need fast visual feedback in a separate viewer.

@@ -1,6 +1,6 @@
 [package]
 name = "ripcanvas"
-version = "0.1.0"
+version = "0.1.13"
 edition = "2024"
 description = "A fast Rust viewer for Obsidian Canvas"
 license = "MIT"
@@ -26,6 +26,9 @@ arboard = "3"
 notify = "6"
 rfd = "0.14"
 fontdb = "0.23"
+image = "0.25"
+ab_glyph = "0.2"
+font8x8 = "0.3"
 
 [build-dependencies]
 slint-build = "1"
