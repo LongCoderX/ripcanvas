@@ -1,20 +1,32 @@
 param(
-    [switch]$ZipOnly
+    [switch]$ZipOnly,
+    [ValidateSet("x64", "x86", "arm", "arm64")]
+    [string]$Arch = "x64",
+    [string]$Version = ""
 )
 
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $distRoot = Join-Path $repoRoot "dist"
-$packageName = "ripcanvas-windows-x64"
+$targetByArch = @{
+    x64   = "x86_64-pc-windows-msvc"
+    x86   = "i686-pc-windows-msvc"
+    arm   = "aarch64-pc-windows-msvc"
+    arm64 = "aarch64-pc-windows-msvc"
+}
+$targetTriple = $targetByArch[$Arch]
+$versionSuffix = if ([string]::IsNullOrWhiteSpace($Version)) { "" } else { "-$Version" }
+$packageName = "ripcanvas-windows11-$Arch$versionSuffix"
 $packageDir = Join-Path $distRoot $packageName
 $zipPath = Join-Path $distRoot "$packageName.zip"
-$exePath = Join-Path $repoRoot "target\release\rocv.exe"
+$exePath = Join-Path $repoRoot "target\$targetTriple\release\rocv.exe"
 
 function New-PortableZip {
     Push-Location $repoRoot
     try {
-        cargo build --release --bin rocv
+        rustup target add $targetTriple
+        cargo build --release --bin rocv --target $targetTriple
 
         if (Test-Path $packageDir) {
             Remove-Item -LiteralPath $packageDir -Recurse -Force
@@ -73,7 +85,11 @@ rocv path\to\file.canvas
 ```
 
 The installer copies `rocv.exe` to `%LOCALAPPDATA%\Programs\RipCanvas` and adds that folder to the user PATH.
+
+Package architecture: PLACEHOLDER_ARCH
 '@ | Set-Content -LiteralPath (Join-Path $packageDir "README.md") -Encoding UTF8
+        (Get-Content -LiteralPath (Join-Path $packageDir "README.md") -Raw).Replace("PLACEHOLDER_ARCH", $Arch) |
+            Set-Content -LiteralPath (Join-Path $packageDir "README.md") -Encoding UTF8
 
         if (Test-Path $zipPath) {
             Remove-Item -LiteralPath $zipPath -Force

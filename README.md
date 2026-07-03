@@ -61,10 +61,18 @@ cargo test
 
 ## Windows Packaging
 
-Create a portable Windows zip:
+Create a portable Windows zip for the current machine's common target:
 
 ```powershell
 .\scripts\package-windows.ps1 -ZipOnly
+```
+
+Create Windows 11 packages for supported architectures:
+
+```powershell
+.\scripts\package-windows.ps1 -ZipOnly -Arch x64
+.\scripts\package-windows.ps1 -ZipOnly -Arch x86
+.\scripts\package-windows.ps1 -ZipOnly -Arch arm
 ```
 
 Create the configured installer package with `cargo-packager`:
@@ -75,6 +83,28 @@ cargo install cargo-packager --locked
 ```
 
 Generated packages are written under `dist/`.
+
+## CI/CD
+
+GitHub Actions runs on `master`, pull requests to `master`, tags matching `v*`,
+and manual dispatches.
+
+The workflow:
+
+- validates formatting, compilation, and tests;
+- creates source archives as `.zip` and `.tar.gz`;
+- builds Windows 11 portable packages for `x64`, `x86`, and `arm`;
+- publishes a GitHub Release automatically for tags like `v0.1.0`.
+
+Release artifacts are named:
+
+```text
+ripcanvas-source-<version>.zip
+ripcanvas-source-<version>.tar.gz
+ripcanvas-windows11-x64-<version>.zip
+ripcanvas-windows11-x86-<version>.zip
+ripcanvas-windows11-arm-<version>.zip
+```
 
 ## Project Layout
 
