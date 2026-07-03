@@ -1,3 +1,5 @@
+import { LineEdit, TextEdit } from "std-widgets.slint";
+
 export struct UiCanvasNode {
     id: string,
     is_group: bool,
@@ -7,6 +9,8 @@ export struct UiCanvasNode {
     width: float,
     height: float,
     label: string,
+    editable_label: string,
+    editable_text: string,
     markdown: styled-text,
     kind: string,
     source: string,
@@ -210,39 +214,6 @@ component StatusPill inherits Rectangle {
     }
 }
 
-component InspectorSection inherits Rectangle {
-    in property <string> title;
-    in property <string> value;
-
-    height: 76px;
-    border-radius: 7px;
-    background: #f3f7f5;
-    border-width: 1px;
-    border-color: #dce7e1;
-
-    Text {
-        x: 10px;
-        y: 8px;
-        text: root.title;
-        color: #718078;
-        font-size: 10px;
-        font-weight: 800;
-    }
-
-    Text {
-        x: 10px;
-        y: 27px;
-        width: parent.width - 20px;
-        height: 40px;
-        text: root.value;
-        color: #17231e;
-        font-size: 12px;
-        font-weight: 600;
-        wrap: word-wrap;
-        overflow: elide;
-    }
-}
-
 component GeometryCell inherits Rectangle {
     in property <string> name;
     in property <string> value;
@@ -312,6 +283,7 @@ export component AppWindow inherits Window {
     callback request-refresh;
     callback request-export-image;
     callback request-copy-text(string);
+    callback request-save-node-content(string, string, string);
 
     property <float> zoom: 1.0;
     property <float> pan-x: 0.0;
@@ -320,6 +292,9 @@ export component AppWindow inherits Window {
     property <bool> is-panning: false;
     property <float> last-pointer-x: 0.0;
     property <float> last-pointer-y: 0.0;
+    in-out property <string> edit-label: "";
+    in-out property <string> edit-text: "";
+    in-out property <string> edit-node-id: "";
     property <bool> inspector-collapsed: false;
     property <float> inspector-width: root.inspector-collapsed ? 42.0 : 280.0;
     property <float> header-height: 64.0;
@@ -333,6 +308,8 @@ export component AppWindow inherits Window {
     property <bool> content-detail-enabled: !root.performance-mode && root.zoom >= 0.65;
     property <bool> edge-detail-enabled: !root.performance-mode && root.zoom >= 0.6;
     property <float> viewport-padding: 180.0;
+    in property <string> platform-kind: "unknown";
+    property <bool> is-macos: root.platform-kind == "macos";
     property <float> visible-canvas-left: -root.pan-x / root.zoom - root.viewport-padding;
     property <float> visible-canvas-top: -root.pan-y / root.zoom - root.viewport-padding;
     property <float> visible-canvas-right: root.visible-canvas-left + root.viewport-width / root.zoom + root.viewport-padding * 2.0;
@@ -380,8 +357,31 @@ export component AppWindow inherits Window {
         root.pan-y = anchor-y - canvas-y * new-zoom;
     }
 
+    function zoom-at-platform(anchor-x: float, anchor-y: float, scroll-delta-y: float) {
+        if (root.is-macos) {
+            root.zoom-at(anchor-x, anchor-y, Math.max(-0.18, Math.min(0.18, scroll-delta-y / 520.0)));
+        } else if (scroll-delta-y > 0.0) {
+            root.zoom-at(anchor-x, anchor-y, 0.1);
+        } else {
+            root.zoom-at(anchor-x, anchor-y, -0.1);
+        }
+    }
+
     function zoom-in() { root.zoom-at(root.viewport-width / 2.0, root.viewport-height / 2.0, 0.1); }
     function zoom-out() { root.zoom-at(root.viewport-width / 2.0, root.viewport-height / 2.0, -0.1); }
+
+    function select-node(index: int) {
+        root.selected-index = index;
+        if (index >= 0) {
+            root.edit-node-id = root.nodes[index].id;
+            root.edit-label = root.nodes[index].editable_label;
+            root.edit-text = root.nodes[index].editable_text;
+        } else {
+            root.edit-node-id = "";
+            root.edit-label = "";
+            root.edit-text = "";
+        }
+    }
 
     function start-pan(pointer-x: float, pointer-y: float) {
         root.is-panning = true;
@@ -527,11 +527,7 @@ export component AppWindow inherits Window {
                     }
 
                     scroll-event(event) => {
-                        if (event.delta-y > 0px) {
-                            root.zoom-at(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px, 0.1);
-                        } else {
-                            root.zoom-at(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px, -0.1);
-                        }
+                        root.zoom-at-platform(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px, event.delta-y / 1px);
                         accept
                     }
                 }
@@ -652,7 +648,7 @@ export component AppWindow inherits Window {
                         }
 
                         group-touch := TouchArea {
-                            clicked => { root.selected-index = i; }
+                            clicked => { root.select-node(i); }
 
                             pointer-event(event) => {
                                 let pointer-x = root.pan-x + node.x * root.zoom + group-touch.mouse-x / 1px;
@@ -868,7 +864,7 @@ export component AppWindow inherits Window {
                         }
 
                         node-touch := TouchArea {
-                            clicked => { root.selected-index = i; }
+                            clicked => { root.select-node(i); }
 
                             pointer-event(event) => {
                                 let pointer-x = root.pan-x + node.x * root.zoom + node-touch.mouse-x / 1px;
@@ -1188,13 +1184,8 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        InspectorSection {
-                            title: "CONTENT";
-                            value: root.nodes[root.selected-index].label;
-                        }
-
                         Rectangle {
-                            height: 86px;
+                            height: 68px;
                             border-radius: 7px;
                             background: #f3f7f5;
                             border-width: 1px;
@@ -1203,33 +1194,47 @@ export component AppWindow inherits Window {
                             Text {
                                 x: 10px;
                                 y: 8px;
-                                text: "SOURCE";
+                                text: "LABEL";
                                 color: #718078;
                                 font-size: 10px;
                                 font-weight: 800;
                             }
 
-                            ToolButton {
-                                x: parent.width - 64px;
-                                y: 7px;
-                                width: 54px;
-                                height: 28px;
-                                label: "Copy";
-                                enabled: root.nodes[root.selected-index].source != "";
-                                clicked => { root.request-copy-text(root.nodes[root.selected-index].source); }
+                            LineEdit {
+                                x: 10px;
+                                y: 28px;
+                                width: parent.width - 20px;
+                                height: 30px;
+                                text: root.edit-label;
+                                font-size: 13px;
+                                edited(text) => { root.edit-label = text; }
                             }
+                        }
+
+                        Rectangle {
+                            height: 174px;
+                            border-radius: 7px;
+                            background: #f3f7f5;
+                            border-width: 1px;
+                            border-color: #dce7e1;
 
                             Text {
                                 x: 10px;
-                                y: 39px;
+                                y: 8px;
+                                text: "TEXT";
+                                color: #718078;
+                                font-size: 10px;
+                                font-weight: 800;
+                            }
+
+                            TextEdit {
+                                x: 10px;
+                                y: 28px;
                                 width: parent.width - 20px;
-                                height: 38px;
-                                text: root.nodes[root.selected-index].source == "" ? "No source" : root.nodes[root.selected-index].source;
-                                color: #17231e;
+                                height: 136px;
+                                text: root.edit-text;
                                 font-size: 12px;
-                                font-weight: 600;
-                                wrap: word-wrap;
-                                overflow: elide;
+                                edited(text) => { root.edit-text = text; }
                             }
                         }
 
@@ -1290,8 +1295,9 @@ export component AppWindow inherits Window {
                                 y: 18px;
                                 width: 72px;
                                 height: 30px;
-                                label: "Edit";
-                                enabled: false;
+                                label: "Save";
+                                enabled: root.edit-node-id != "";
+                                clicked => { root.request-save-node-content(root.edit-node-id, root.edit-label, root.edit-text); }
                             }
 
                             ToolButton {

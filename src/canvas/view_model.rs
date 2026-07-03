@@ -1,4 +1,4 @@
-use crate::canvas::model::CanvasDocument;
+use crate::canvas::{markdown::obsidian_markdown_preview, model::CanvasDocument};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanvasViewModel {
@@ -14,6 +14,8 @@ pub struct CanvasNodeView {
     pub kind: String,
     pub title: String,
     pub label: String,
+    pub editable_label: String,
+    pub editable_text: String,
     pub markdown: String,
     pub source: String,
     pub geometry: String,
@@ -103,12 +105,15 @@ impl CanvasViewModel {
                     "" if title.is_empty() => node.kind.as_str(),
                     value => value,
                 };
+                let markdown = obsidian_markdown_preview(body);
                 CanvasNodeView {
                     id: node.id.clone(),
                     kind: node.kind.clone(),
                     title: title.to_owned(),
                     label: body.to_owned(),
-                    markdown: body.to_owned(),
+                    editable_label: node.label.clone().unwrap_or_default(),
+                    editable_text: node.text.clone().unwrap_or_default(),
+                    markdown,
                     source: node
                         .text
                         .as_deref()
@@ -327,6 +332,8 @@ mod tests {
             kind: "text".to_owned(),
             title: String::new(),
             label: "A".to_owned(),
+            editable_label: String::new(),
+            editable_text: "A".to_owned(),
             markdown: "A".to_owned(),
             source: "A".to_owned(),
             geometry: String::new(),

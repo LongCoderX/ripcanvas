@@ -8,10 +8,13 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use slint::{Color, ComponentHandle, ModelRc, SharedString, StyledText, VecModel};
+use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, StyledText, VecModel};
 
 use crate::{
-    canvas::{export::export_canvas_png, parser::parse_canvas_file, view_model::CanvasViewModel},
+    canvas::{
+        edit::update_node_content, export::export_canvas_png, parser::parse_canvas_file,
+        view_model::CanvasViewModel,
+    },
     cli::LaunchDocument,
 };
 
@@ -47,6 +50,7 @@ pub fn run(document: LaunchDocument) -> Result<()> {
 
     let window = AppWindow::new()?;
     window.set_app_font_family(preferred_font_family());
+    window.set_platform_kind(SharedString::from(platform_kind()));
     let state = Rc::new(RefCell::new(AppState::new()));
 
     apply_view_model(&window, view_model);
@@ -218,6 +222,44 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
             }
         }
     });
+
+    let weak = window.as_weak();
+    let state_for_save = Rc::clone(&state);
+    window.on_request_save_node_content(move |node_id, label, text| {
+        let Some(window) = weak.upgrade() else {
+            return;
+        };
+        let Some(path) = state_for_save.borrow().current_path.clone() else {
+            set_status(&window, "error", "Error", "No canvas file to save");
+            return;
+        };
+
+        let node_id = node_id.to_string();
+        match update_node_content(&path, node_id.as_str(), label.as_str(), text.as_str()).and_then(
+            |()| {
+                parse_canvas_file(&path)
+                    .map(|canvas| CanvasViewModel::from_canvas(&canvas))
+                    .with_context(|| format!("Failed to reload canvas file: {}", path.display()))
+            },
+        ) {
+            Ok(view_model) => {
+                apply_view_model_with_selection(&window, view_model, Some(node_id.as_str()));
+                set_status(
+                    &window,
+                    "success",
+                    "Saved",
+                    format!("Saved node {} in {}", node_id, path.display()),
+                );
+            }
+            Err(error) => set_status(
+                &window,
+                "error",
+                "Save failed",
+                format!("Save failed: {}", short_error(&error)),
+            ),
+        }
+        sync_state_to_ui(&window, &state_for_save.borrow());
+    });
 }
 
 fn open_canvas_path(window: &AppWindow, state: &mut AppState, path: PathBuf) -> Result<()> {
@@ -277,11 +319,41 @@ fn export_canvas_path(path: &Path, output: &Path) -> Result<()> {
 }
 
 fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel) {
+    apply_view_model_with_selection(window, view_model, None);
+}
+
+fn apply_view_model_with_selection(
+    window: &AppWindow,
+    view_model: CanvasViewModel,
+    selected_id: Option<&str>,
+) {
+    let selected_index = selected_id
+        .and_then(|id| view_model.nodes.iter().position(|node| node.id == id))
+        .map(|index| index as i32)
+        .unwrap_or(-1);
+    let selected_edit_label = selected_id
+        .and_then(|id| {
+            view_model
+                .nodes
+                .iter()
+                .find(|node| node.id == id)
+                .map(|node| node.editable_label.clone())
+        })
+        .unwrap_or_default();
+    let selected_edit_text = selected_id
+        .and_then(|id| {
+            view_model
+                .nodes
+                .iter()
+                .find(|node| node.id == id)
+                .map(|node| node.editable_text.clone())
+        })
+        .unwrap_or_default();
+
     window.set_canvas_width(view_model.width);
     window.set_canvas_height(view_model.height);
     window.set_node_count(view_model.nodes.len() as i32);
     window.set_edge_count(view_model.edges.len() as i32);
-    window.set_selected_index(-1);
     window.set_edges(ModelRc::new(Rc::new(VecModel::from(
         view_model
             .edges
@@ -323,6 +395,8 @@ fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel) {
                 width: node.width,
                 height: node.height,
                 label: SharedString::from(node.label),
+                editable_label: SharedString::from(node.editable_label),
+                editable_text: SharedString::from(node.editable_text),
                 markdown: styled_text_from_markdown(&node.markdown),
                 kind: SharedString::from(node.kind),
                 source: SharedString::from(node.source),
@@ -337,6 +411,10 @@ fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel) {
             })
             .collect::<Vec<UiCanvasNode>>(),
     ))));
+    window.set_selected_index(selected_index);
+    window.set_edit_node_id(SharedString::from(selected_id.unwrap_or("")));
+    window.set_edit_label(SharedString::from(selected_edit_label));
+    window.set_edit_text(SharedString::from(selected_edit_text));
 }
 
 fn color_from_hex(value: &str) -> Color {
@@ -383,7 +461,8 @@ fn start_watcher(window: &AppWindow, path: &Path) -> Result<RecommendedWatcher> 
                 .map_err(|error| format!("{error:#}"));
             let _ = weak.upgrade_in_event_loop(move |window| match result {
                 Ok(view_model) => {
-                    apply_view_model(&window, view_model);
+                    let selected_id = selected_node_id(&window);
+                    apply_view_model_with_selection(&window, view_model, selected_id.as_deref());
                     set_status(
                         &window,
                         "success",
@@ -413,6 +492,17 @@ fn start_watcher(window: &AppWindow, path: &Path) -> Result<RecommendedWatcher> 
             Ok(watcher)
         }
     }
+}
+
+fn selected_node_id(window: &AppWindow) -> Option<String> {
+    let selected_index = window.get_selected_index();
+    if selected_index < 0 {
+        return None;
+    }
+    window
+        .get_nodes()
+        .row_data(selected_index as usize)
+        .map(|node| node.id.to_string())
 }
 
 fn is_canvas_reload_event(event: &Event, watched_path: &Path) -> bool {
@@ -552,6 +642,16 @@ fn preferred_font_family() -> SharedString {
         .copied()
         .unwrap_or("sans-serif")
         .into()
+}
+
+fn platform_kind() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
 }
 
 fn recent_store_path() -> PathBuf {
