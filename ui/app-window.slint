@@ -1,0 +1,1006 @@
+export struct UiCanvasNode {
+    id: string,
+    is_group: bool,
+    title: string,
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    label: string,
+    markdown: styled-text,
+    kind: string,
+    source: string,
+    geometry: string,
+    color: color,
+    color_raw: string,
+    text_color: color,
+}
+
+export struct UiCanvasEdge {
+    from_x: float,
+    from_y: float,
+    control_1_x: float,
+    control_1_y: float,
+    control_2_x: float,
+    control_2_y: float,
+    to_x: float,
+    to_y: float,
+    from_color: color,
+    to_color: color,
+}
+
+component ToolButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> enabled: true;
+    in property <image> icon;
+    in property <float> icon-size: 16.0;
+    in property <bool> primary: false;
+    callback clicked;
+
+    width: 42px;
+    height: 38px;
+    border-radius: 6px;
+    background: !root.enabled ? #eef2ef : (root.primary ? (touch.pressed ? #cfe7d9 : (touch.has-hover ? #e2f1e8 : #edf7f1)) : (touch.pressed ? #d7eadf : (touch.has-hover ? #eef6f1 : #ffffff)));
+    border-width: 1px;
+    border-color: root.enabled ? (root.primary ? #a9cdbc : #cbd8d1) : #e0e7e3;
+
+    HorizontalLayout {
+        padding-left: root.label == "" ? 0px : 10px;
+        padding-right: root.label == "" ? 0px : 12px;
+        spacing: root.label == "" ? 0px : 7px;
+        alignment: center;
+
+        if root.icon.width > 0 && root.icon.height > 0: Image {
+            source: root.icon;
+            width: root.icon-size * 1px;
+            height: root.icon-size * 1px;
+            colorize: root.enabled ? #17231e : #93a099;
+        }
+
+        if root.label != "": Text {
+            text: root.label;
+            color: root.enabled ? #17231e : #93a099;
+            font-size: 13px;
+            font-weight: 750;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea { clicked => { if (root.enabled) { root.clicked(); } } }
+}
+
+component ToolbarDivider inherits Rectangle {
+    width: 1px;
+    height: 30px;
+    background: #d9e2dd;
+}
+
+component MenuItem inherits Rectangle {
+    in property <string> label;
+    in property <string> hint;
+    in property <image> icon;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    height: 42px;
+    border-radius: 6px;
+    background: !root.enabled ? transparent : (touch.pressed ? #dcebe3 : (touch.has-hover ? #eef6f1 : transparent));
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 9px;
+        alignment: center;
+
+        Image {
+            source: root.icon;
+            width: 17px;
+            height: 17px;
+            colorize: root.enabled ? #17231e : #9ca8a2;
+        }
+
+        Text {
+            text: root.label;
+            color: root.enabled ? #17231e : #9ca8a2;
+            font-size: 13px;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+
+        Rectangle { }
+
+        Text {
+            text: root.hint;
+            color: root.enabled ? #839088 : #b3bbb7;
+            font-size: 11px;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea { clicked => { if (root.enabled) { root.clicked(); } } }
+}
+
+component FloatingToolButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> tooltip;
+    in property <bool> active: false;
+    callback clicked;
+
+    width: 42px;
+    height: 42px;
+    border-radius: 7px;
+    background: root.active ? (touch.pressed ? #cfe7d9 : (touch.has-hover ? #e2f1e8 : #edf7f1)) : (touch.pressed ? #d7eadf : (touch.has-hover ? #eef6f1 : #ffffff));
+    border-width: 1px;
+    border-color: root.active ? #a9cdbc : #cbd8d1;
+
+    Image {
+        x: 11px;
+        y: 11px;
+        width: 20px;
+        height: 20px;
+        source: root.icon;
+        colorize: #17231e;
+    }
+
+    if touch.has-hover && root.tooltip != "": Rectangle {
+        x: 50px;
+        y: 7px;
+        width: 124px;
+        height: 28px;
+        border-radius: 6px;
+        background: #17231eea;
+        border-width: 1px;
+        border-color: #ffffff22;
+
+        Text {
+            text: root.tooltip;
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 650;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea { clicked => { root.clicked(); } }
+}
+
+component MetaRow inherits Rectangle {
+    in property <string> name;
+    in property <string> value;
+
+    height: 50px;
+    background: transparent;
+
+    Text {
+        x: 0px;
+        y: 0px;
+        text: root.name;
+        color: #77837d;
+        font-size: 10px;
+        font-weight: 700;
+    }
+
+    Text {
+        x: 0px;
+        y: 17px;
+        width: parent.width;
+        height: 30px;
+        text: root.value;
+        color: #18231f;
+        font-size: 13px;
+        font-weight: 600;
+        wrap: word-wrap;
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "RipCanvas";
+    icon: @image-url("../assets/icon.png");
+    width: 1180px;
+    height: 760px;
+    background: #e9efeb;
+    in property <string> app-font-family: "Microsoft YaHei UI";
+    default-font-family: root.app-font-family;
+
+    in property <[UiCanvasNode]> nodes;
+    in property <[UiCanvasEdge]> edges;
+    in property <string> status-text: "No canvas loaded";
+    in property <float> canvas-width: 960;
+    in property <float> canvas-height: 640;
+    in property <int> node-count: 0;
+    in property <int> edge-count: 0;
+    in property <bool> has-open-file: false;
+    in property <bool> has-recent-file: false;
+    in property <string> recent-file-label: "No recent file";
+    in-out property <bool> edge-gradient-enabled: true;
+    in-out property <bool> edge-ripple-enabled: true;
+    in-out property <bool> minimap-enabled: true;
+    in-out property <bool> show-node-titles: true;
+    property <bool> file-menu-open: false;
+
+    callback request-open-file;
+    callback request-open-recent;
+    callback request-refresh;
+    callback request-copy-text(string);
+
+    property <float> zoom: 1.0;
+    property <float> pan-x: 0.0;
+    property <float> pan-y: 0.0;
+    in-out property <int> selected-index: -1;
+    property <bool> is-panning: false;
+    property <float> last-pointer-x: 0.0;
+    property <float> last-pointer-y: 0.0;
+    property <bool> inspector-collapsed: false;
+    property <float> inspector-width: root.inspector-collapsed ? 42.0 : 280.0;
+    property <float> header-height: 64.0;
+    property <float> viewport-width: root.width / 1px - root.inspector-width;
+    property <float> viewport-height: root.height / 1px - root.header-height;
+    property <float> ripple-phase: 0.0;
+
+    function reset-view() {
+        root.zoom = 1.0;
+        root.pan-x = 24.0;
+        root.pan-y = 24.0;
+    }
+
+    function fit-view() {
+        root.zoom = Math.max(0.25, Math.min(1.8, Math.min((root.viewport-width - 64.0) / root.canvas-width, (root.viewport-height - 64.0) / root.canvas-height)));
+        root.pan-x = Math.max(24.0, (root.viewport-width - root.canvas-width * root.zoom) / 2.0);
+        root.pan-y = Math.max(24.0, (root.viewport-height - root.canvas-height * root.zoom) / 2.0);
+    }
+
+    function zoom-at(anchor-x: float, anchor-y: float, delta: float) {
+        let old-zoom = root.zoom;
+        let new-zoom = Math.max(0.35, Math.min(2.6, root.zoom + delta));
+        let canvas-x = (anchor-x - root.pan-x) / old-zoom;
+        let canvas-y = (anchor-y - root.pan-y) / old-zoom;
+        root.zoom = new-zoom;
+        root.pan-x = anchor-x - canvas-x * new-zoom;
+        root.pan-y = anchor-y - canvas-y * new-zoom;
+    }
+
+    function zoom-in() { root.zoom-at(root.viewport-width / 2.0, root.viewport-height / 2.0, 0.1); }
+    function zoom-out() { root.zoom-at(root.viewport-width / 2.0, root.viewport-height / 2.0, -0.1); }
+
+    function start-pan(pointer-x: float, pointer-y: float) {
+        root.is-panning = true;
+        root.last-pointer-x = pointer-x;
+        root.last-pointer-y = pointer-y;
+    }
+
+    function update-pan(pointer-x: float, pointer-y: float) {
+        if (root.is-panning) {
+            root.pan-x += pointer-x - root.last-pointer-x;
+            root.pan-y += pointer-y - root.last-pointer-y;
+            root.last-pointer-x = pointer-x;
+            root.last-pointer-y = pointer-y;
+        }
+    }
+
+    function stop-pan() {
+        root.is-panning = false;
+    }
+
+    function copy-selected-node() {
+        if (root.selected-index >= 0) {
+            root.request-copy-text(
+                "id: " + root.nodes[root.selected-index].id + "\n"
+                + "type: " + root.nodes[root.selected-index].kind + "\n"
+                + "title: " + root.nodes[root.selected-index].title + "\n"
+                + "label: " + root.nodes[root.selected-index].label + "\n"
+                + "source: " + root.nodes[root.selected-index].source + "\n"
+                + "geometry: " + root.nodes[root.selected-index].geometry
+            );
+        }
+    }
+
+    forward-focus: shortcuts;
+
+    shortcuts := FocusScope {
+        KeyBinding { keys: @keys(Control + O); activated => { root.request-open-file(); } }
+        KeyBinding { keys: @keys(Control + R); activated => { root.request-refresh(); } }
+        KeyBinding { keys: @keys(Control + C); activated => { root.copy-selected-node(); } }
+        KeyBinding { keys: @keys(Control + F); activated => { root.fit-view(); } }
+        KeyBinding { keys: @keys(Control + "0"); activated => { root.reset-view(); } }
+    }
+
+    ripple-timer := Timer {
+        interval: 80ms;
+        triggered => {
+            root.ripple-phase = Math.mod(root.ripple-phase + 0.045, 1.0);
+        }
+    }
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+
+        Rectangle {
+            height: root.header-height * 1px;
+            background: #fbfdfb;
+            border-width: 0px;
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 12px;
+                alignment: center;
+
+                Rectangle {
+                    width: 250px;
+                    height: 48px;
+                    background: transparent;
+
+                    Rectangle {
+                        x: 0px;
+                        y: 5px;
+                        width: 38px;
+                        height: 38px;
+                        border-radius: 8px;
+                        background: #ffffff;
+                        border-width: 1px;
+                        border-color: #d5e0da;
+                        clip: true;
+
+                        Image {
+                            x: 5px;
+                            y: 5px;
+                            width: 28px;
+                            height: 28px;
+                            source: @image-url("../assets/icon.png");
+                        }
+                    }
+
+                    Text {
+                        x: 50px;
+                        y: 3px;
+                        text: "RipCanvas";
+                        color: #17231e;
+                        font-size: 20px;
+                        font-weight: 850;
+                    }
+
+                    Text {
+                        x: 50px;
+                        y: 30px;
+                        text: root.node-count + " nodes  /  " + root.edge-count + " edges";
+                        color: #6b7a72;
+                        font-size: 11px;
+                        font-weight: 500;
+                    }
+                }
+
+                ToolbarDivider { }
+
+                ToolButton {
+                    icon: @image-url("../assets/icons/file-menu.svg");
+                    label: "File";
+                    width: 92px;
+                    primary: root.file-menu-open;
+                    clicked => { root.file-menu-open = !root.file-menu-open; }
+                }
+
+                Rectangle { }
+
+                Text {
+                    text: root.status-text;
+                    color: #596a61;
+                    font-size: 12px;
+                    width: 430px;
+                    overflow: elide;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+            padding: 0px;
+
+            Rectangle {
+                background: #dfe8e2;
+                clip: true;
+
+                pan-touch := TouchArea {
+                    pointer-event(event) => {
+                        if ((event.button == PointerEventButton.left || event.button == PointerEventButton.middle) && event.kind == PointerEventKind.down) {
+                            root.file-menu-open = false;
+                            root.start-pan(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px);
+                        }
+                        if (event.kind == PointerEventKind.up) {
+                            root.stop-pan();
+                        }
+                        if (root.is-panning && event.kind == PointerEventKind.move) {
+                            root.update-pan(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px);
+                        }
+                    }
+
+                    scroll-event(event) => {
+                        if (event.delta-y > 0px) {
+                            root.zoom-at(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px, 0.1);
+                        } else {
+                            root.zoom-at(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px, -0.1);
+                        }
+                        accept
+                    }
+                }
+
+                Rectangle {
+                    x: root.pan-x * 1px;
+                    y: root.pan-y * 1px;
+                    width: root.canvas-width * root.zoom * 1px;
+                    height: root.canvas-height * root.zoom * 1px;
+                    background: #f9fbfa;
+                    border-width: 1px;
+                    border-color: #c9d7d0;
+
+                    if root.nodes.length == 0: Rectangle {
+                        x: 42px;
+                        y: 42px;
+                        width: 340px;
+                        height: 112px;
+                        background: #ffffff;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: #d5e0da;
+
+                        Text { x: 20px; y: 20px; text: "No canvas loaded"; color: #17231e; font-size: 20px; font-weight: 800; }
+                        Text { x: 20px; y: 58px; width: parent.width - 40px; text: "Waiting for a canvas document."; color: #617168; font-size: 13px; wrap: word-wrap; }
+                    }
+
+                    for node[i] in root.nodes: Rectangle {
+                        visible: node.is_group;
+                        x: node.x * root.zoom * 1px;
+                        y: node.y * root.zoom * 1px;
+                        width: node.width * root.zoom * 1px;
+                        height: node.height * root.zoom * 1px;
+                        border-radius: 7px;
+                        border-width: 1px;
+                        border-color: #bac9c2;
+                        background: node.color;
+                        drop-shadow-color: root.selected-index == i ? #11181666 : #17231e2f;
+                        drop-shadow-blur: root.selected-index == i ? 22px : 12px;
+                        drop-shadow-offset-x: 0px;
+                        drop-shadow-offset-y: root.selected-index == i ? 10px : 5px;
+                        drop-shadow-spread: 0px;
+                        Rectangle {
+                            visible: !root.show-node-titles || node.title == "";
+                            x: 0px;
+                            y: 0px;
+                            height: Math.max(5.0, 7.0 * root.zoom) * 1px;
+                            width: parent.width;
+                            border-radius: 7px;
+                            background: node.color;
+                            opacity: 0.9;
+                        }
+
+                        if root.show-node-titles && node.title != "": Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: Math.max(14.0, 28.0 * root.zoom) * 1px;
+                            border-radius: 7px;
+                            background: #ffffff5f;
+
+                            Text {
+                                x: 10px * root.zoom;
+                                width: parent.width - 20px * root.zoom;
+                                height: parent.height;
+                                text: node.title;
+                                color: node.text_color;
+                                font-size: Math.max(9.0, 12.0 * root.zoom) * 1px;
+                                font-weight: 800;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if node.kind == "text": StyledText {
+                            x: 12px * root.zoom;
+                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            width: parent.width - 24px * root.zoom;
+                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            text: node.markdown;
+                            default-color: node.text_color;
+                            link-color: #1559c7;
+                            default-font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
+                        }
+
+                        if node.kind != "text" && node.label != "": Text {
+                            x: 12px * root.zoom;
+                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            width: parent.width - 24px * root.zoom;
+                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            text: node.label;
+                            color: node.text_color;
+                            font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
+                            font-weight: 600;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle {
+                            visible: root.selected-index == i;
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: parent.height;
+                            border-radius: 7px;
+                            border-width: 0px;
+                            background: #2f3a3526;
+                        }
+
+                        group-touch := TouchArea {
+                            clicked => { root.selected-index = i; }
+
+                            pointer-event(event) => {
+                                let pointer-x = root.pan-x + node.x * root.zoom + group-touch.mouse-x / 1px;
+                                let pointer-y = root.pan-y + node.y * root.zoom + group-touch.mouse-y / 1px;
+
+                                if (event.button == PointerEventButton.middle && event.kind == PointerEventKind.down) {
+                                    root.start-pan(pointer-x, pointer-y);
+                                }
+                                if (event.button == PointerEventButton.middle && event.kind == PointerEventKind.up) {
+                                    root.stop-pan();
+                                }
+                                if (root.is-panning && event.kind == PointerEventKind.move) {
+                                    root.update-pan(pointer-x, pointer-y);
+                                }
+                            }
+                        }
+                    }
+
+                    for edge in root.edges: Path {
+                        width: parent.width;
+                        height: parent.height;
+                        viewbox-width: root.canvas-width * root.zoom;
+                        viewbox-height: root.canvas-height * root.zoom;
+                        stroke: #17231e;
+                        stroke-width: 7px;
+                        opacity: 0.14;
+                        fill: transparent;
+
+                        MoveTo { x: edge.from_x * root.zoom; y: edge.from_y * root.zoom + 3.0; }
+                        CubicTo {
+                            control-1-x: edge.control_1_x * root.zoom;
+                            control-1-y: edge.control_1_y * root.zoom + 3.0;
+                            control-2-x: edge.control_2_x * root.zoom;
+                            control-2-y: edge.control_2_y * root.zoom + 3.0;
+                            x: edge.to_x * root.zoom;
+                            y: edge.to_y * root.zoom + 3.0;
+                        }
+                    }
+
+                    for edge in root.edges: Path {
+                        width: parent.width;
+                        height: parent.height;
+                        viewbox-width: root.canvas-width * root.zoom;
+                        viewbox-height: root.canvas-height * root.zoom;
+                        stroke: root.edge-gradient-enabled ? @linear-gradient(90deg, edge.from_color, edge.to_color) : #7d978d;
+                        stroke-width: 3px;
+                        fill: transparent;
+
+                        MoveTo { x: edge.from_x * root.zoom; y: edge.from_y * root.zoom; }
+                        CubicTo {
+                            control-1-x: edge.control_1_x * root.zoom;
+                            control-1-y: edge.control_1_y * root.zoom;
+                            control-2-x: edge.control_2_x * root.zoom;
+                            control-2-y: edge.control_2_y * root.zoom;
+                            x: edge.to_x * root.zoom;
+                            y: edge.to_y * root.zoom;
+                        }
+                    }
+
+                    for edge in root.edges: Rectangle {
+                        x: edge.from_x * root.zoom * 1px - 5px;
+                        y: edge.from_y * root.zoom * 1px - 5px;
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 5px;
+                        background: edge.from_color;
+                        border-width: 2px;
+                        border-color: #ffffff;
+                    }
+
+                    for edge in root.edges: Rectangle {
+                        x: edge.to_x * root.zoom * 1px - 5px;
+                        y: edge.to_y * root.zoom * 1px - 5px;
+                        width: 10px;
+                        height: 10px;
+                        border-radius: 5px;
+                        background: edge.to_color;
+                        border-width: 2px;
+                        border-color: #ffffff;
+                    }
+
+                    for edge in root.edges: Rectangle {
+                        visible: root.edge-ripple-enabled;
+                        property <float> t: root.ripple-phase;
+                        property <float> omt: 1.0 - self.t;
+                        property <float> ripple-x: self.omt * self.omt * self.omt * edge.from_x + 3.0 * self.omt * self.omt * self.t * edge.control_1_x + 3.0 * self.omt * self.t * self.t * edge.control_2_x + self.t * self.t * self.t * edge.to_x;
+                        property <float> ripple-y: self.omt * self.omt * self.omt * edge.from_y + 3.0 * self.omt * self.omt * self.t * edge.control_1_y + 3.0 * self.omt * self.t * self.t * edge.control_2_y + self.t * self.t * self.t * edge.to_y;
+                        x: self.ripple-x * root.zoom * 1px - 4px;
+                        y: self.ripple-y * root.zoom * 1px - 4px;
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: root.edge-gradient-enabled ? edge.to_color : #f7fbf9;
+                        border-width: 1px;
+                        border-color: #ffffff;
+                    }
+
+                    for node[i] in root.nodes: Rectangle {
+                        visible: !node.is_group;
+                        x: node.x * root.zoom * 1px;
+                        y: node.y * root.zoom * 1px;
+                        width: node.width * root.zoom * 1px;
+                        height: node.height * root.zoom * 1px;
+                        border-radius: 7px;
+                        border-width: 1px;
+                        border-color: #bac9c2;
+                        background: node.color;
+                        drop-shadow-color: root.selected-index == i ? #11181666 : #17231e2f;
+                        drop-shadow-blur: root.selected-index == i ? 22px : 12px;
+                        drop-shadow-offset-x: 0px;
+                        drop-shadow-offset-y: root.selected-index == i ? 10px : 5px;
+                        drop-shadow-spread: 0px;
+                        Rectangle {
+                            visible: !root.show-node-titles || node.title == "";
+                            x: 0px;
+                            y: 0px;
+                            height: Math.max(5.0, 7.0 * root.zoom) * 1px;
+                            width: parent.width;
+                            border-radius: 7px;
+                            background: node.color;
+                            opacity: 0.9;
+                        }
+
+                        if root.show-node-titles && node.title != "": Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: Math.max(14.0, 28.0 * root.zoom) * 1px;
+                            border-radius: 7px;
+                            background: #ffffff5f;
+
+                            Text {
+                                x: 10px * root.zoom;
+                                width: parent.width - 20px * root.zoom;
+                                height: parent.height;
+                                text: node.title;
+                                color: node.text_color;
+                                font-size: Math.max(9.0, 12.0 * root.zoom) * 1px;
+                                font-weight: 800;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if node.kind == "text": StyledText {
+                            x: 12px * root.zoom;
+                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            width: parent.width - 24px * root.zoom;
+                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            text: node.markdown;
+                            default-color: node.text_color;
+                            link-color: #1559c7;
+                            default-font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
+                        }
+
+                        if node.kind != "text" && node.label != "": Text {
+                            x: 12px * root.zoom;
+                            y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            width: parent.width - 24px * root.zoom;
+                            height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
+                            text: node.label;
+                            color: node.text_color;
+                            font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
+                            font-weight: 600;
+                            wrap: word-wrap;
+                        }
+
+                        Rectangle {
+                            visible: root.selected-index == i;
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: parent.height;
+                            border-radius: 7px;
+                            border-width: 0px;
+                            background: #2f3a3526;
+                        }
+
+                        node-touch := TouchArea {
+                            clicked => { root.selected-index = i; }
+
+                            pointer-event(event) => {
+                                let pointer-x = root.pan-x + node.x * root.zoom + node-touch.mouse-x / 1px;
+                                let pointer-y = root.pan-y + node.y * root.zoom + node-touch.mouse-y / 1px;
+
+                                if (event.button == PointerEventButton.middle && event.kind == PointerEventKind.down) {
+                                    root.start-pan(pointer-x, pointer-y);
+                                }
+                                if (event.button == PointerEventButton.middle && event.kind == PointerEventKind.up) {
+                                    root.stop-pan();
+                                }
+                                if (root.is-panning && event.kind == PointerEventKind.move) {
+                                    root.update-pan(pointer-x, pointer-y);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    x: 14px;
+                    y: 14px;
+                    width: 52px;
+                    height: 362px;
+                    border-radius: 10px;
+                    background: #fbfdfcf0;
+                    border-width: 1px;
+                    border-color: #c6d4ce;
+                    drop-shadow-color: #17231e2f;
+                    drop-shadow-blur: 18px;
+                    drop-shadow-offset-x: 0px;
+                    drop-shadow-offset-y: 8px;
+
+                    VerticalLayout {
+                        padding: 5px;
+                        spacing: 6px;
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/minus.svg");
+                            tooltip: "Zoom Out";
+                            clicked => { root.zoom-out(); }
+                        }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/plus.svg");
+                            tooltip: "Zoom In";
+                            clicked => { root.zoom-in(); }
+                        }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/fit.svg");
+                            tooltip: "Fit View";
+                            clicked => { root.fit-view(); }
+                        }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/reset.svg");
+                            tooltip: "Reset 1:1";
+                            clicked => { root.reset-view(); }
+                        }
+
+                        Rectangle { height: 1px; background: #d7e1dc; }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/title.svg");
+                            tooltip: root.show-node-titles ? "Hide Titles" : "Show Titles";
+                            active: root.show-node-titles;
+                            clicked => { root.show-node-titles = !root.show-node-titles; }
+                        }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/gradient.svg");
+                            tooltip: root.edge-gradient-enabled ? "Gradient On" : "Gradient Off";
+                            active: root.edge-gradient-enabled;
+                            clicked => { root.edge-gradient-enabled = !root.edge-gradient-enabled; }
+                        }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/wave.svg");
+                            tooltip: root.edge-ripple-enabled ? "Wave On" : "Wave Off";
+                            active: root.edge-ripple-enabled;
+                            clicked => { root.edge-ripple-enabled = !root.edge-ripple-enabled; }
+                        }
+
+                        FloatingToolButton {
+                            icon: @image-url("../assets/icons/map.svg");
+                            tooltip: root.minimap-enabled ? "Map On" : "Map Off";
+                            active: root.minimap-enabled;
+                            clicked => { root.minimap-enabled = !root.minimap-enabled; }
+                        }
+                    }
+                }
+
+                minimap := Rectangle {
+                    visible: root.minimap-enabled;
+                    property <float> minimap-width: 218.0;
+                    property <float> minimap-height: 154.0;
+                    property <float> minimap-padding: 10.0;
+                    property <float> minimap-scale: Math.min((self.minimap-width - self.minimap-padding * 2.0) / root.canvas-width, (self.minimap-height - self.minimap-padding * 2.0) / root.canvas-height);
+                    property <float> viewport-canvas-x: Math.max(0.0, -root.pan-x / root.zoom);
+                    property <float> viewport-canvas-y: Math.max(0.0, -root.pan-y / root.zoom);
+                    property <float> viewport-canvas-width: Math.min(root.canvas-width, root.viewport-width / root.zoom);
+                    property <float> viewport-canvas-height: Math.min(root.canvas-height, root.viewport-height / root.zoom);
+
+                    x: parent.width - self.minimap-width * 1px - 18px;
+                    y: parent.height - self.minimap-height * 1px - 18px;
+                    width: self.minimap-width * 1px;
+                    height: self.minimap-height * 1px;
+                    border-radius: 8px;
+                    background: #fbfdfcea;
+                    border-width: 1px;
+                    border-color: #c6d4ce;
+                    clip: true;
+                    drop-shadow-color: #17231e33;
+                    drop-shadow-blur: 18px;
+                    drop-shadow-offset-x: 0px;
+                    drop-shadow-offset-y: 8px;
+
+                    Rectangle {
+                        x: minimap.minimap-padding * 1px;
+                        y: minimap.minimap-padding * 1px;
+                        width: root.canvas-width * minimap.minimap-scale * 1px;
+                        height: root.canvas-height * minimap.minimap-scale * 1px;
+                        border-radius: 5px;
+                        background: #eef4f0;
+                        border-width: 1px;
+                        border-color: #d4ded9;
+                    }
+
+                    for edge in root.edges: Path {
+                        width: parent.width;
+                        height: parent.height;
+                        viewbox-width: minimap.minimap-width;
+                        viewbox-height: minimap.minimap-height;
+                        stroke: #7d978d88;
+                        stroke-width: 1px;
+                        fill: transparent;
+
+                        MoveTo { x: minimap.minimap-padding + edge.from_x * minimap.minimap-scale; y: minimap.minimap-padding + edge.from_y * minimap.minimap-scale; }
+                        CubicTo {
+                            control-1-x: minimap.minimap-padding + edge.control_1_x * minimap.minimap-scale;
+                            control-1-y: minimap.minimap-padding + edge.control_1_y * minimap.minimap-scale;
+                            control-2-x: minimap.minimap-padding + edge.control_2_x * minimap.minimap-scale;
+                            control-2-y: minimap.minimap-padding + edge.control_2_y * minimap.minimap-scale;
+                            x: minimap.minimap-padding + edge.to_x * minimap.minimap-scale;
+                            y: minimap.minimap-padding + edge.to_y * minimap.minimap-scale;
+                        }
+                    }
+
+                    for node in root.nodes: Rectangle {
+                        x: (minimap.minimap-padding + node.x * minimap.minimap-scale) * 1px;
+                        y: (minimap.minimap-padding + node.y * minimap.minimap-scale) * 1px;
+                        width: Math.max(3.0, node.width * minimap.minimap-scale) * 1px;
+                        height: Math.max(3.0, node.height * minimap.minimap-scale) * 1px;
+                        border-radius: 2px;
+                        background: node.color;
+                        border-width: 1px;
+                        border-color: #ffffff99;
+                    }
+
+                    Rectangle {
+                        x: (minimap.minimap-padding + minimap.viewport-canvas-x * minimap.minimap-scale) * 1px;
+                        y: (minimap.minimap-padding + minimap.viewport-canvas-y * minimap.minimap-scale) * 1px;
+                        width: Math.max(12.0, minimap.viewport-canvas-width * minimap.minimap-scale) * 1px;
+                        height: Math.max(10.0, minimap.viewport-canvas-height * minimap.minimap-scale) * 1px;
+                        border-radius: 3px;
+                        background: #17231e18;
+                        border-width: 2px;
+                        border-color: #17231ecc;
+                    }
+                }
+            }
+
+            Rectangle {
+                width: root.inspector-width * 1px;
+                background: #fbfdfc;
+                border-width: 0px;
+
+                if root.inspector-collapsed: VerticalLayout {
+                    padding: 4px;
+                    spacing: 0px;
+
+                    ToolButton {
+                        label: "<";
+                        width: 34px;
+                        height: 34px;
+                        clicked => { root.inspector-collapsed = false; }
+                    }
+                }
+
+                if !root.inspector-collapsed: VerticalLayout {
+                    padding: 18px;
+                    spacing: 13px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+
+                        Text {
+                            text: "Inspector";
+                            color: #17231e;
+                            font-size: 18px;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle { }
+
+                        ToolButton {
+                            label: ">";
+                            width: 34px;
+                            height: 34px;
+                            clicked => { root.inspector-collapsed = true; }
+                        }
+                    }
+
+                    if root.selected-index < 0: Text {
+                        text: "No node selected.";
+                        color: #66766f;
+                        font-size: 13px;
+                        wrap: word-wrap;
+                    }
+
+                    if root.selected-index >= 0: VerticalLayout {
+                        spacing: 7px;
+                        ToolButton { label: "Copy"; width: 72px; clicked => { root.copy-selected-node(); } }
+                        MetaRow { name: "ID"; value: root.nodes[root.selected-index].id; }
+                        MetaRow { name: "TYPE"; value: root.nodes[root.selected-index].kind; }
+                        MetaRow { name: "TITLE"; value: root.nodes[root.selected-index].title; }
+                        MetaRow { name: "LABEL"; value: root.nodes[root.selected-index].label; }
+                        MetaRow { name: "COLOR" ; value: root.nodes[root.selected-index].color_raw; }
+                        MetaRow { name: "SOURCE"; value: root.nodes[root.selected-index].source; }
+                        MetaRow { name: "GEOMETRY"; value: root.nodes[root.selected-index].geometry; }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.file-menu-open: Rectangle {
+        x: 292px;
+        y: 56px;
+        width: 218px;
+        height: 146px;
+        border-radius: 8px;
+        background: #fbfdfcf7;
+        border-width: 1px;
+        border-color: #c8d8d0;
+        drop-shadow-color: #17231e30;
+        drop-shadow-blur: 18px;
+        drop-shadow-offset-x: 0px;
+        drop-shadow-offset-y: 8px;
+
+        VerticalLayout {
+            padding: 6px;
+            spacing: 2px;
+
+            MenuItem {
+                icon: @image-url("../assets/icons/open.svg");
+                label: "Open Canvas";
+                hint: "Ctrl+O";
+                clicked => {
+                    root.file-menu-open = false;
+                    root.request-open-file();
+                }
+            }
+
+            MenuItem {
+                icon: @image-url("../assets/icons/history.svg");
+                label: "Open Recent";
+                hint: "";
+                enabled: root.has-recent-file;
+                clicked => {
+                    root.file-menu-open = false;
+                    root.request-open-recent();
+                }
+            }
+
+            MenuItem {
+                icon: @image-url("../assets/icons/refresh.svg");
+                label: "Refresh";
+                hint: "Ctrl+R";
+                enabled: root.has-open-file;
+                clicked => {
+                    root.file-menu-open = false;
+                    root.request-refresh();
+                }
+            }
+        }
+    }
+}

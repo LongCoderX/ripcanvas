@@ -1,0 +1,322 @@
+use crate::canvas::model::CanvasDocument;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanvasViewModel {
+    pub nodes: Vec<CanvasNodeView>,
+    pub edges: Vec<CanvasEdgeView>,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanvasNodeView {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub label: String,
+    pub markdown: String,
+    pub source: String,
+    pub geometry: String,
+    pub color: String,
+    pub color_raw: String,
+    pub text_color: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CanvasEdgeView {
+    pub from_x: f32,
+    pub from_y: f32,
+    pub control_1_x: f32,
+    pub control_1_y: f32,
+    pub control_2_x: f32,
+    pub control_2_y: f32,
+    pub to_x: f32,
+    pub to_y: f32,
+    pub from_color: String,
+    pub to_color: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Side {
+    Top,
+    Right,
+    Bottom,
+    Left,
+}
+
+impl CanvasViewModel {
+    pub const PADDING: f32 = 48.0;
+
+    pub fn empty() -> Self {
+        Self {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            width: 960.0,
+            height: 640.0,
+        }
+    }
+
+    pub fn from_canvas(canvas: &CanvasDocument) -> Self {
+        if canvas.nodes.is_empty() {
+            return Self::empty();
+        }
+
+        let min_x = canvas
+            .nodes
+            .iter()
+            .map(|node| node.x)
+            .fold(f32::INFINITY, f32::min);
+        let min_y = canvas
+            .nodes
+            .iter()
+            .map(|node| node.y)
+            .fold(f32::INFINITY, f32::min);
+        let offset_x = Self::PADDING - min_x;
+        let offset_y = Self::PADDING - min_y;
+
+        let nodes: Vec<CanvasNodeView> = canvas
+            .nodes
+            .iter()
+            .map(|node| {
+                let color_raw = node.color.clone().unwrap_or_default();
+                let color = canvas_color_to_hex(node.color.as_deref());
+                let title = node.title().unwrap_or("");
+                let body = match node.body() {
+                    "" if title.is_empty() => node.kind.as_str(),
+                    value => value,
+                };
+                CanvasNodeView {
+                    id: node.id.clone(),
+                    kind: node.kind.clone(),
+                    title: title.to_owned(),
+                    label: body.to_owned(),
+                    markdown: body.to_owned(),
+                    source: node
+                        .text
+                        .as_deref()
+                        .or(node.file.as_deref())
+                        .or(node.url.as_deref())
+                        .unwrap_or("")
+                        .to_owned(),
+                    geometry: format!(
+                        "x {}  y {}  w {}  h {}",
+                        node.x.round(),
+                        node.y.round(),
+                        node.width.round(),
+                        node.height.round()
+                    ),
+                    text_color: readable_text_color(&color).to_owned(),
+                    color,
+                    color_raw,
+                    x: node.x + offset_x,
+                    y: node.y + offset_y,
+                    width: node.width,
+                    height: node.height,
+                }
+            })
+            .collect();
+
+        let edges = canvas
+            .edges
+            .iter()
+            .filter_map(|edge| {
+                let from = nodes.iter().find(|node| node.id == edge.from_node)?;
+                let to = nodes.iter().find(|node| node.id == edge.to_node)?;
+                Some(Self::edge_between(
+                    from,
+                    to,
+                    parse_side(edge.from_side.as_deref()),
+                    parse_side(edge.to_side.as_deref()),
+                ))
+            })
+            .collect();
+
+        let width = nodes
+            .iter()
+            .map(|node| node.x + node.width + Self::PADDING)
+            .fold(960.0, f32::max);
+        let height = nodes
+            .iter()
+            .map(|node| node.y + node.height + Self::PADDING)
+            .fold(640.0, f32::max);
+
+        Self {
+            nodes,
+            edges,
+            width,
+            height,
+        }
+    }
+
+    fn edge_between(
+        from: &CanvasNodeView,
+        to: &CanvasNodeView,
+        from_side: Option<Side>,
+        to_side: Option<Side>,
+    ) -> CanvasEdgeView {
+        let from_center = center(from);
+        let to_center = center(to);
+        let from_side = from_side.unwrap_or_else(|| side_toward(from_center, to_center));
+        let to_side = to_side.unwrap_or_else(|| side_toward(to_center, from_center));
+        let (from_x, from_y) = point_on_side(from, from_side, to_center);
+        let (to_x, to_y) = point_on_side(to, to_side, from_center);
+        let (from_dx, from_dy) = side_normal(from_side);
+        let (to_dx, to_dy) = side_normal(to_side);
+        let distance = ((to_x - from_x).hypot(to_y - from_y)).clamp(80.0, 260.0);
+        let pull = distance * 0.42;
+
+        CanvasEdgeView {
+            from_x,
+            from_y,
+            control_1_x: from_x + from_dx * pull,
+            control_1_y: from_y + from_dy * pull,
+            control_2_x: to_x + to_dx * pull,
+            control_2_y: to_y + to_dy * pull,
+            to_x,
+            to_y,
+            from_color: from.color.clone(),
+            to_color: to.color.clone(),
+        }
+    }
+}
+
+fn center(node: &CanvasNodeView) -> (f32, f32) {
+    (node.x + node.width / 2.0, node.y + node.height / 2.0)
+}
+
+fn parse_side(side: Option<&str>) -> Option<Side> {
+    match side {
+        Some("top") => Some(Side::Top),
+        Some("right") => Some(Side::Right),
+        Some("bottom") => Some(Side::Bottom),
+        Some("left") => Some(Side::Left),
+        _ => None,
+    }
+}
+
+fn side_toward(from: (f32, f32), to: (f32, f32)) -> Side {
+    let dx = to.0 - from.0;
+    let dy = to.1 - from.1;
+    if dx.abs() >= dy.abs() {
+        if dx >= 0.0 { Side::Right } else { Side::Left }
+    } else if dy >= 0.0 {
+        Side::Bottom
+    } else {
+        Side::Top
+    }
+}
+
+fn point_on_side(node: &CanvasNodeView, side: Side, toward: (f32, f32)) -> (f32, f32) {
+    let min_x = node.x;
+    let max_x = node.x + node.width;
+    let min_y = node.y;
+    let max_y = node.y + node.height;
+    match side {
+        Side::Top => (toward.0.clamp(min_x, max_x), min_y),
+        Side::Right => (max_x, toward.1.clamp(min_y, max_y)),
+        Side::Bottom => (toward.0.clamp(min_x, max_x), max_y),
+        Side::Left => (min_x, toward.1.clamp(min_y, max_y)),
+    }
+}
+
+fn side_normal(side: Side) -> (f32, f32) {
+    match side {
+        Side::Top => (0.0, -1.0),
+        Side::Right => (1.0, 0.0),
+        Side::Bottom => (0.0, 1.0),
+        Side::Left => (-1.0, 0.0),
+    }
+}
+
+fn canvas_color_to_hex(color: Option<&str>) -> String {
+    match color.map(str::trim).filter(|value| !value.is_empty()) {
+        Some(value) if value.starts_with('#') => normalize_hex(value),
+        Some("1") => "#e93147".to_owned(),
+        Some("2") => "#ec7500".to_owned(),
+        Some("3") => "#e0ac00".to_owned(),
+        Some("4") => "#08b94e".to_owned(),
+        Some("5") => "#00bfbc".to_owned(),
+        Some("6") => "#7852ee".to_owned(),
+        Some(value) => normalize_hex(value),
+        None => "#ffffff".to_owned(),
+    }
+}
+
+fn normalize_hex(value: &str) -> String {
+    let trimmed = value.trim();
+    let hex = trimmed.strip_prefix('#').unwrap_or(trimmed);
+    if hex.len() == 3 && hex.chars().all(|char| char.is_ascii_hexdigit()) {
+        let mut expanded = String::from("#");
+        for char in hex.chars() {
+            expanded.push(char);
+            expanded.push(char);
+        }
+        expanded.to_lowercase()
+    } else if hex.len() == 6 && hex.chars().all(|char| char.is_ascii_hexdigit()) {
+        format!("#{hex}").to_lowercase()
+    } else {
+        "#ffffff".to_owned()
+    }
+}
+
+fn readable_text_color(background: &str) -> &'static str {
+    let Some((r, g, b)) = parse_hex_rgb(background) else {
+        return "#16201b";
+    };
+    let luminance = 0.2126 * r as f32 + 0.7152 * g as f32 + 0.0722 * b as f32;
+    if luminance < 142.0 {
+        "#ffffff"
+    } else {
+        "#16201b"
+    }
+}
+
+fn parse_hex_rgb(value: &str) -> Option<(u8, u8, u8)> {
+    let hex = value.strip_prefix('#')?;
+    if hex.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
+    Some((r, g, b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edge_connects_to_node_boundaries() {
+        let from = CanvasNodeView {
+            id: "a".to_owned(),
+            kind: "text".to_owned(),
+            title: String::new(),
+            label: "A".to_owned(),
+            markdown: "A".to_owned(),
+            source: "A".to_owned(),
+            geometry: String::new(),
+            color: "#ffffff".to_owned(),
+            color_raw: String::new(),
+            text_color: "#16201b".to_owned(),
+            x: 10.0,
+            y: 10.0,
+            width: 100.0,
+            height: 80.0,
+        };
+        let to = CanvasNodeView {
+            id: "b".to_owned(),
+            x: 240.0,
+            ..from.clone()
+        };
+
+        let edge = CanvasViewModel::edge_between(&from, &to, None, None);
+
+        assert_eq!(edge.from_x, 110.0);
+        assert_eq!(edge.to_x, 240.0);
+    }
+}

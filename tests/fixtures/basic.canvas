@@ -1,0 +1,33 @@
+{
+  "nodes": [
+    {
+      "id": "node-a",
+      "type": "text",
+      "x": 40,
+      "y": 80,
+      "width": 220,
+      "height": 120,
+      "text": "**Architecture** note",
+      "color": "#cdebdc"
+    },
+    {
+      "id": "node-b",
+      "type": "file",
+      "x": 360,
+      "y": 140,
+      "width": 180,
+      "height": 90,
+      "file": "docs/plan.md",
+      "color": "6"
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-a-b",
+      "fromNode": "node-a",
+      "toNode": "node-b",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ]
+}
