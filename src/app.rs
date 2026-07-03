@@ -38,15 +38,10 @@ impl AppState {
 /// # Errors
 /// Returns an error when the native Slint window cannot be created or run.
 pub fn run(document: LaunchDocument) -> Result<()> {
-    let (initial_path, view_model, status) = match document {
-        LaunchDocument::Empty => (
-            None,
-            CanvasViewModel::empty(),
-            SharedString::from("No canvas loaded"),
-        ),
+    let (initial_path, view_model) = match document {
+        LaunchDocument::Empty => (None, CanvasViewModel::empty()),
         LaunchDocument::Loaded { path, canvas } => {
-            let status = SharedString::from(format!("Loaded {}", path.display()));
-            (Some(path), CanvasViewModel::from_canvas(&canvas), status)
+            (Some(path), CanvasViewModel::from_canvas(&canvas))
         }
     };
 
@@ -55,7 +50,8 @@ pub fn run(document: LaunchDocument) -> Result<()> {
     window.window().set_maximized(true);
     let state = Rc::new(RefCell::new(AppState::new()));
 
-    apply_view_model(&window, view_model, status);
+    apply_view_model(&window, view_model);
+    set_status(&window, "idle", "Idle", "No canvas loaded");
     sync_state_to_ui(&window, &state.borrow());
 
     if let Some(path) = initial_path {
@@ -63,7 +59,26 @@ pub fn run(document: LaunchDocument) -> Result<()> {
         state.current_path = Some(path.clone());
         state.recent_path = Some(path.clone());
         save_recent_file(&path);
-        state.watcher = start_watcher(&window, &path).ok();
+        match start_watcher(&window, &path) {
+            Ok(watcher) => {
+                state.watcher = Some(watcher);
+                set_status(
+                    &window,
+                    "success",
+                    "Watching",
+                    format!("Loaded {}", path.display()),
+                );
+            }
+            Err(error) => {
+                state.watcher = None;
+                set_status(
+                    &window,
+                    "warning",
+                    "Loaded",
+                    format!("Watcher unavailable: {}", short_error(&error)),
+                );
+            }
+        }
         sync_state_to_ui(&window, &state);
     }
 
@@ -87,7 +102,12 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
         if let Some(window) = weak.upgrade() {
             let result = open_canvas_path(&window, &mut state_for_open.borrow_mut(), path);
             if let Err(error) = result {
-                window.set_status_text(SharedString::from(format!("Open failed: {error:#}")));
+                set_status(
+                    &window,
+                    "error",
+                    "Error",
+                    format!("Open failed: {}", short_error(&error)),
+                );
             }
             sync_state_to_ui(&window, &state_for_open.borrow());
         }
@@ -100,13 +120,18 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
             return;
         };
         let Some(path) = state_for_recent.borrow().recent_path.clone() else {
-            window.set_status_text(SharedString::from("No recent canvas"));
+            set_status(&window, "warning", "Idle", "No recent canvas");
             return;
         };
 
         let result = open_canvas_path(&window, &mut state_for_recent.borrow_mut(), path);
         if let Err(error) = result {
-            window.set_status_text(SharedString::from(format!("Recent open failed: {error:#}")));
+            set_status(
+                &window,
+                "error",
+                "Error",
+                format!("Recent open failed: {}", short_error(&error)),
+            );
         }
         sync_state_to_ui(&window, &state_for_recent.borrow());
     });
@@ -118,17 +143,25 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
             return;
         };
         let Some(path) = state_for_refresh.borrow().current_path.clone() else {
-            window.set_status_text(SharedString::from("No canvas to refresh"));
+            set_status(&window, "warning", "Idle", "No canvas to refresh");
             return;
         };
 
-        match reload_canvas_path(&window, &path) {
-            Ok(()) => {
-                window.set_status_text(SharedString::from(format!("Refreshed {}", path.display())))
-            }
-            Err(error) => {
-                window.set_status_text(SharedString::from(format!("Refresh failed: {error:#}")));
-            }
+        set_status(&window, "idle", "Reloading", "Refreshing canvas");
+        match load_canvas_path(
+            &window,
+            &path,
+            "success",
+            "Reloaded",
+            format!("Refreshed {}", path.display()),
+        ) {
+            Ok(()) => {}
+            Err(error) => set_status(
+                &window,
+                "error",
+                "Reload failed",
+                format!("Keeping last view: {}", short_error(&error)),
+            ),
         }
     });
 
@@ -139,7 +172,7 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
             return;
         };
         let Some(path) = state_for_export.borrow().current_path.clone() else {
-            window.set_status_text(SharedString::from("No canvas to export"));
+            set_status(&window, "warning", "Idle", "No canvas to export");
             return;
         };
         let Some(output) = rfd::FileDialog::new()
@@ -151,13 +184,18 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
         };
 
         match export_canvas_path(&path, &output) {
-            Ok(()) => window.set_status_text(SharedString::from(format!(
-                "Exported image to {}",
-                output.display()
-            ))),
-            Err(error) => {
-                window.set_status_text(SharedString::from(format!("Export failed: {error:#}")));
-            }
+            Ok(()) => set_status(
+                &window,
+                "success",
+                "Exported",
+                format!("Exported PNG to {}", output.display()),
+            ),
+            Err(error) => set_status(
+                &window,
+                "error",
+                "Error",
+                format!("Export failed: {}", short_error(&error)),
+            ),
         }
     });
 
@@ -165,12 +203,17 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
     window.on_request_copy_text(move |text| match copy_to_clipboard(text.as_str()) {
         Ok(()) => {
             if let Some(window) = weak.upgrade() {
-                window.set_status_text(SharedString::from("Copied node information"));
+                set_status(&window, "success", "Copied", "Copied to clipboard");
             }
         }
         Err(error) => {
             if let Some(window) = weak.upgrade() {
-                window.set_status_text(SharedString::from(format!("Copy failed: {error:#}")));
+                set_status(
+                    &window,
+                    "error",
+                    "Error",
+                    format!("Copy failed: {}", short_error(&error)),
+                );
             }
         }
     });
@@ -178,24 +221,51 @@ fn wire_callbacks(window: &AppWindow, state: Rc<RefCell<AppState>>) {
 
 fn open_canvas_path(window: &AppWindow, state: &mut AppState, path: PathBuf) -> Result<()> {
     let path = validate_canvas_path(path)?;
-    reload_canvas_path(window, &path)?;
-    window.set_status_text(SharedString::from(format!("Loaded {}", path.display())));
+    load_canvas_path(
+        window,
+        &path,
+        "success",
+        "Loaded",
+        format!("Loaded {}", path.display()),
+    )?;
 
     state.current_path = Some(path.clone());
     state.recent_path = Some(path.clone());
     save_recent_file(&path);
-    state.watcher = Some(start_watcher(window, &path)?);
+    match start_watcher(window, &path) {
+        Ok(watcher) => {
+            state.watcher = Some(watcher);
+            set_status(
+                window,
+                "success",
+                "Watching",
+                format!("Loaded {}", path.display()),
+            );
+        }
+        Err(error) => {
+            state.watcher = None;
+            set_status(
+                window,
+                "warning",
+                "Loaded",
+                format!("Watcher unavailable: {}", short_error(&error)),
+            );
+        }
+    }
     Ok(())
 }
 
-fn reload_canvas_path(window: &AppWindow, path: &Path) -> Result<()> {
+fn load_canvas_path(
+    window: &AppWindow,
+    path: &Path,
+    status_kind: &str,
+    status_label: &str,
+    operation: impl Into<String>,
+) -> Result<()> {
     let canvas = parse_canvas_file(path)
         .with_context(|| format!("Failed to load canvas file: {}", path.display()))?;
-    apply_view_model(
-        window,
-        CanvasViewModel::from_canvas(&canvas),
-        SharedString::from(format!("Loaded {}", path.display())),
-    );
+    apply_view_model(window, CanvasViewModel::from_canvas(&canvas));
+    set_status(window, status_kind, status_label, operation);
     Ok(())
 }
 
@@ -205,8 +275,7 @@ fn export_canvas_path(path: &Path, output: &Path) -> Result<()> {
     export_canvas_png(&canvas, output)
 }
 
-fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel, status: SharedString) {
-    window.set_status_text(status);
+fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel) {
     window.set_canvas_width(view_model.width);
     window.set_canvas_height(view_model.height);
     window.set_node_count(view_model.nodes.len() as i32);
@@ -257,6 +326,10 @@ fn apply_view_model(window: &AppWindow, view_model: CanvasViewModel, status: Sha
                 kind: SharedString::from(node.kind),
                 source: SharedString::from(node.source),
                 geometry: SharedString::from(node.geometry),
+                geometry_x: SharedString::from(node.geometry_x),
+                geometry_y: SharedString::from(node.geometry_y),
+                geometry_w: SharedString::from(node.geometry_w),
+                geometry_h: SharedString::from(node.geometry_h),
                 color: color_from_hex(&node.color),
                 color_raw: SharedString::from(node.color_raw),
                 text_color: color_from_hex(&node.text_color),
@@ -293,20 +366,36 @@ fn start_watcher(window: &AppWindow, path: &Path) -> Result<RecommendedWatcher> 
 
         let weak = weak.clone();
         let path = watched_path.clone();
+        let status_path = path.clone();
+        let _ = weak.upgrade_in_event_loop(move |window| {
+            set_status(
+                &window,
+                "idle",
+                "Reloading",
+                format!("Reloading {}", status_path.display()),
+            );
+        });
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(250));
             let result = parse_canvas_file(&path)
                 .map(|canvas| CanvasViewModel::from_canvas(&canvas))
                 .map_err(|error| format!("{error:#}"));
             let _ = weak.upgrade_in_event_loop(move |window| match result {
-                Ok(view_model) => apply_view_model(
+                Ok(view_model) => {
+                    apply_view_model(&window, view_model);
+                    set_status(
+                        &window,
+                        "success",
+                        "Reloaded",
+                        format!("Reloaded {}", path.display()),
+                    );
+                }
+                Err(error) => set_status(
                     &window,
-                    view_model,
-                    SharedString::from(format!("Reloaded {}", path.display())),
+                    "error",
+                    "Reload failed",
+                    format!("Keeping last view: {}", short_message(&error)),
                 ),
-                Err(error) => window.set_status_text(SharedString::from(format!(
-                    "Refresh failed, keeping last view: {error}"
-                ))),
             });
         });
     })?;
@@ -367,6 +456,13 @@ fn copy_to_clipboard(text: &str) -> Result<()> {
 fn sync_state_to_ui(window: &AppWindow, state: &AppState) {
     window.set_has_open_file(state.current_path.is_some());
     window.set_has_recent_file(state.recent_path.is_some());
+    window.set_current_file_path(SharedString::from(
+        state
+            .current_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "No canvas".to_owned()),
+    ));
     window.set_recent_file_label(SharedString::from(
         state
             .recent_path
@@ -374,6 +470,28 @@ fn sync_state_to_ui(window: &AppWindow, state: &AppState) {
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| "No recent file".to_owned()),
     ));
+}
+
+fn set_status(window: &AppWindow, kind: &str, label: &str, operation: impl Into<String>) {
+    let operation = operation.into();
+    window.set_status_kind(SharedString::from(kind));
+    window.set_status_label(SharedString::from(label));
+    window.set_status_text(SharedString::from(operation.clone()));
+    window.set_operation_text(SharedString::from(operation));
+}
+
+fn short_error(error: &anyhow::Error) -> String {
+    short_message(&format!("{error:#}"))
+}
+
+fn short_message(message: &str) -> String {
+    let mut line = message.lines().next().unwrap_or(message).trim().to_owned();
+    const MAX_LEN: usize = 160;
+    if line.len() > MAX_LEN {
+        line.truncate(MAX_LEN);
+        line.push_str("...");
+    }
+    line
 }
 
 fn preferred_font_family() -> SharedString {
