@@ -398,6 +398,21 @@ fn apply_view_model_with_selection(
                 editable_label: SharedString::from(node.editable_label),
                 editable_text: SharedString::from(node.editable_text),
                 markdown: styled_text_from_markdown(&node.markdown),
+                markdown_blocks: ModelRc::new(Rc::new(VecModel::from(
+                    node.markdown_blocks
+                        .into_iter()
+                        .map(|block| UiMarkdownBlock {
+                            kind: SharedString::from(block.kind),
+                            text: styled_text_from_markdown(&block.text),
+                            plain: SharedString::from(block.plain),
+                            marker: SharedString::from(block.marker),
+                            level: block.level,
+                            checked: block.checked,
+                            indent: block.indent,
+                        })
+                        .collect::<Vec<UiMarkdownBlock>>(),
+                ))),
+                content_scroll_max: node.content_scroll_max,
                 kind: SharedString::from(node.kind),
                 source: SharedString::from(node.source),
                 geometry: SharedString::from(node.geometry),

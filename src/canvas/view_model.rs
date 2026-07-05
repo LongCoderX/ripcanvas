@@ -1,4 +1,7 @@
-use crate::canvas::{markdown::obsidian_markdown_preview, model::CanvasDocument};
+use crate::canvas::{
+    markdown::{MarkdownBlock, obsidian_markdown_blocks, obsidian_markdown_preview},
+    model::CanvasDocument,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CanvasViewModel {
@@ -17,6 +20,8 @@ pub struct CanvasNodeView {
     pub editable_label: String,
     pub editable_text: String,
     pub markdown: String,
+    pub markdown_blocks: Vec<MarkdownBlockView>,
+    pub content_scroll_max: f32,
     pub source: String,
     pub geometry: String,
     pub geometry_x: String,
@@ -30,6 +35,17 @@ pub struct CanvasNodeView {
     pub y: f32,
     pub width: f32,
     pub height: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MarkdownBlockView {
+    pub kind: String,
+    pub text: String,
+    pub plain: String,
+    pub marker: String,
+    pub level: i32,
+    pub checked: bool,
+    pub indent: i32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,6 +122,16 @@ impl CanvasViewModel {
                     value => value,
                 };
                 let markdown = obsidian_markdown_preview(body);
+                let markdown_blocks: Vec<MarkdownBlockView> = obsidian_markdown_blocks(body)
+                    .into_iter()
+                    .map(MarkdownBlockView::from)
+                    .collect();
+                let content_scroll_max = estimated_content_scroll_max(
+                    node.height,
+                    title,
+                    node.title().is_some(),
+                    &markdown_blocks,
+                );
                 CanvasNodeView {
                     id: node.id.clone(),
                     kind: node.kind.clone(),
@@ -114,6 +140,8 @@ impl CanvasViewModel {
                     editable_label: node.label.clone().unwrap_or_default(),
                     editable_text: node.text.clone().unwrap_or_default(),
                     markdown,
+                    markdown_blocks,
+                    content_scroll_max,
                     source: node
                         .text
                         .as_deref()
@@ -213,6 +241,45 @@ impl CanvasViewModel {
             to_y,
             from_color: from.color.clone(),
             to_color: to.color.clone(),
+        }
+    }
+}
+
+fn estimated_content_scroll_max(
+    node_height: f32,
+    _title: &str,
+    has_title: bool,
+    blocks: &[MarkdownBlockView],
+) -> f32 {
+    let header_height = if has_title { 34.0 } else { 0.0 };
+    let visible_height = (node_height - header_height - 26.0).max(48.0);
+    let content_height: f32 = blocks
+        .iter()
+        .map(|block| match block.kind.as_str() {
+            "heading" => (30.0 - block.level as f32 * 2.0).max(20.0),
+            "code" => 56.0,
+            "table" => 52.0,
+            "callout" => 42.0,
+            "embed" => 38.0,
+            "rule" => 12.0,
+            _ => 28.0,
+        })
+        .sum::<f32>()
+        + blocks.len().saturating_sub(1) as f32 * 5.0;
+
+    (content_height - visible_height).max(0.0)
+}
+
+impl From<MarkdownBlock> for MarkdownBlockView {
+    fn from(block: MarkdownBlock) -> Self {
+        Self {
+            kind: block.kind.as_str().to_owned(),
+            text: block.text,
+            plain: block.plain,
+            marker: block.marker,
+            level: i32::from(block.level),
+            checked: block.checked,
+            indent: i32::from(block.indent),
         }
     }
 }
@@ -335,6 +402,8 @@ mod tests {
             editable_label: String::new(),
             editable_text: "A".to_owned(),
             markdown: "A".to_owned(),
+            markdown_blocks: Vec::new(),
+            content_scroll_max: 0.0,
             source: "A".to_owned(),
             geometry: String::new(),
             geometry_x: "10".to_owned(),

@@ -1,5 +1,15 @@
 import { LineEdit, TextEdit } from "std-widgets.slint";
 
+export struct UiMarkdownBlock {
+    kind: string,
+    text: styled-text,
+    plain: string,
+    marker: string,
+    level: int,
+    checked: bool,
+    indent: int,
+}
+
 export struct UiCanvasNode {
     id: string,
     is_group: bool,
@@ -12,6 +22,8 @@ export struct UiCanvasNode {
     editable_label: string,
     editable_text: string,
     markdown: styled-text,
+    markdown_blocks: [UiMarkdownBlock],
+    content_scroll_max: float,
     kind: string,
     source: string,
     geometry: string,
@@ -245,6 +257,188 @@ component GeometryCell inherits Rectangle {
     }
 }
 
+component MarkdownPreview inherits Rectangle {
+    in property <[UiMarkdownBlock]> blocks;
+    in property <color> text-color;
+    in property <float> zoom-factor: 1.0;
+    in property <float> scroll-offset: 0.0;
+
+    background: transparent;
+    clip: true;
+
+    VerticalLayout {
+        y: -root.scroll-offset * root.zoom-factor * 1px;
+        padding: 0px;
+        spacing: Math.max(2.0, 5.0 * root.zoom-factor) * 1px;
+
+        for block in root.blocks: Rectangle {
+            height: block.kind == "heading" ? Math.max(22.0, (30.0 - block.level * 2.0) * root.zoom-factor) * 1px
+                : block.kind == "code" ? Math.max(36.0, 54.0 * root.zoom-factor) * 1px
+                : block.kind == "table" ? Math.max(34.0, 48.0 * root.zoom-factor) * 1px
+                : block.kind == "callout" ? Math.max(28.0, 40.0 * root.zoom-factor) * 1px
+                : block.kind == "embed" ? Math.max(26.0, 36.0 * root.zoom-factor) * 1px
+                : block.kind == "rule" ? Math.max(8.0, 12.0 * root.zoom-factor) * 1px
+                : Math.max(20.0, 27.0 * root.zoom-factor) * 1px;
+            background: block.kind == "callout" ? #eef6ffcc
+                : block.kind == "code" ? #17231e13
+                : block.kind == "embed" ? #ffffffb5
+                : block.kind == "quote" ? #ffffff55
+                : block.kind == "table" ? #ffffff88
+                : transparent;
+            border-radius: block.kind == "paragraph" || block.kind == "heading" || block.kind == "list" || block.kind == "task" || block.kind == "rule" ? 0px : 5px;
+            border-width: block.kind == "callout" || block.kind == "code" || block.kind == "embed" || block.kind == "table" ? 1px : 0px;
+            border-color: block.kind == "callout" ? #9ec5ff
+                : block.kind == "code" ? #17231e33
+                : #dce7e1;
+
+            if block.kind == "rule": Rectangle {
+                x: 0px;
+                y: parent.height / 2;
+                width: parent.width;
+                height: 1px;
+                background: root.text-color;
+                opacity: 0.35;
+            }
+
+            if block.kind == "heading": StyledText {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                text: block.text;
+                default-color: root.text-color;
+                link-color: #1559c7;
+                default-font-size: Math.max(12.0, (21.0 - block.level * 1.7) * root.zoom-factor) * 1px;
+            }
+
+            if block.kind == "paragraph": StyledText {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                text: block.text;
+                default-color: root.text-color;
+                link-color: #1559c7;
+                default-font-size: Math.max(10.0, 14.0 * root.zoom-factor) * 1px;
+            }
+
+            if block.kind == "task": Text {
+                x: (block.indent * 12.0 * root.zoom-factor) * 1px;
+                y: 1px;
+                width: Math.max(16.0, 20.0 * root.zoom-factor) * 1px;
+                height: parent.height;
+                text: block.checked ? "☑" : "☐";
+                color: root.text-color;
+                font-size: Math.max(10.0, 14.0 * root.zoom-factor) * 1px;
+                font-weight: 800;
+            }
+
+            if block.kind == "task": StyledText {
+                x: ((block.indent * 12.0 + 22.0) * root.zoom-factor) * 1px;
+                y: 0px;
+                width: parent.width - self.x;
+                height: parent.height;
+                text: block.text;
+                default-color: root.text-color;
+                link-color: #1559c7;
+                default-font-size: Math.max(10.0, 14.0 * root.zoom-factor) * 1px;
+            }
+
+            if block.kind == "list": Text {
+                x: (block.indent * 12.0 * root.zoom-factor) * 1px;
+                y: 0px;
+                width: Math.max(18.0, 24.0 * root.zoom-factor) * 1px;
+                height: parent.height;
+                text: block.marker;
+                color: root.text-color;
+                font-size: Math.max(10.0, 14.0 * root.zoom-factor) * 1px;
+                font-weight: 800;
+            }
+
+            if block.kind == "list": StyledText {
+                x: ((block.indent * 12.0 + 24.0) * root.zoom-factor) * 1px;
+                y: 0px;
+                width: parent.width - self.x;
+                height: parent.height;
+                text: block.text;
+                default-color: root.text-color;
+                link-color: #1559c7;
+                default-font-size: Math.max(10.0, 14.0 * root.zoom-factor) * 1px;
+            }
+
+            if block.kind == "quote": Rectangle {
+                x: 0px;
+                y: 2px;
+                width: Math.max(2.0, 3.0 * root.zoom-factor) * 1px;
+                height: parent.height - 4px;
+                background: root.text-color;
+                opacity: 0.35;
+            }
+
+            if block.kind == "quote": StyledText {
+                x: Math.max(8.0, 10.0 * root.zoom-factor) * 1px;
+                y: 0px;
+                width: parent.width - self.x;
+                height: parent.height;
+                text: block.text;
+                default-color: root.text-color;
+                link-color: #1559c7;
+                default-font-size: Math.max(10.0, 13.0 * root.zoom-factor) * 1px;
+            }
+
+            if block.kind == "callout": StyledText {
+                x: 8px * root.zoom-factor;
+                y: 4px * root.zoom-factor;
+                width: parent.width - 16px * root.zoom-factor;
+                height: parent.height - 8px * root.zoom-factor;
+                text: block.text;
+                default-color: #17324f;
+                link-color: #1559c7;
+                default-font-size: Math.max(10.0, 13.0 * root.zoom-factor) * 1px;
+            }
+
+            if block.kind == "code" || block.kind == "table": Text {
+                x: 8px * root.zoom-factor;
+                y: 5px * root.zoom-factor;
+                width: parent.width - 16px * root.zoom-factor;
+                height: parent.height - 10px * root.zoom-factor;
+                text: block.plain;
+                color: root.text-color;
+                font-family: "monospace";
+                font-size: Math.max(9.0, 12.0 * root.zoom-factor) * 1px;
+                wrap: word-wrap;
+                overflow: elide;
+            }
+
+            if block.kind == "embed": Text {
+                x: 8px * root.zoom-factor;
+                y: 0px;
+                width: parent.width - 16px * root.zoom-factor;
+                height: parent.height;
+                text: "📎 " + block.plain;
+                color: root.text-color;
+                font-size: Math.max(10.0, 13.0 * root.zoom-factor) * 1px;
+                font-weight: 750;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            if block.kind == "block-id": Text {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: parent.height;
+                text: block.plain;
+                color: root.text-color;
+                font-family: "monospace";
+                font-size: Math.max(8.0, 11.0 * root.zoom-factor) * 1px;
+                opacity: 0.7;
+                overflow: elide;
+            }
+        }
+    }
+}
+
 export component AppWindow inherits Window {
     title: "RipCanvas";
     icon: @image-url("../assets/icon.png");
@@ -292,11 +486,13 @@ export component AppWindow inherits Window {
     property <bool> is-panning: false;
     property <float> last-pointer-x: 0.0;
     property <float> last-pointer-y: 0.0;
+    property <float> pinch-start-zoom: 1.0;
+    in-out property <float> selected-content-scroll: 0.0;
     in-out property <string> edit-label: "";
     in-out property <string> edit-text: "";
     in-out property <string> edit-node-id: "";
     property <bool> inspector-collapsed: false;
-    property <float> inspector-width: root.inspector-collapsed ? 42.0 : 280.0;
+    property <float> inspector-width: root.inspector-collapsed ? 42.0 : 340.0;
     property <float> header-height: 64.0;
     property <float> footer-height: 34.0;
     property <float> viewport-width: root.width / 1px - root.inspector-width;
@@ -304,10 +500,10 @@ export component AppWindow inherits Window {
     property <float> ripple-phase: 0.0;
     property <float> fit-target-zoom: Math.max(0.25, Math.min(1.8, Math.min((root.viewport-width - 64.0) / root.canvas-width, (root.viewport-height - 64.0) / root.canvas-height)));
     property <bool> view-is-fit: Math.abs(root.zoom - root.fit-target-zoom) < 0.03;
-    property <bool> performance-mode: root.node-count > 250 || root.edge-count > 350 || root.zoom < 0.5 || root.is-panning;
-    property <bool> content-detail-enabled: !root.performance-mode && root.zoom >= 0.65;
-    property <bool> edge-detail-enabled: !root.performance-mode && root.zoom >= 0.6;
-    property <float> viewport-padding: 180.0;
+    property <bool> performance-mode: root.node-count > 900 || root.edge-count > 1400;
+    property <bool> content-detail-enabled: root.zoom >= 0.16;
+    property <bool> edge-detail-enabled: !root.performance-mode && root.zoom >= 0.18;
+    property <float> viewport-padding: 640.0;
     in property <string> platform-kind: "unknown";
     property <bool> is-macos: root.platform-kind == "macos";
     property <float> visible-canvas-left: -root.pan-x / root.zoom - root.viewport-padding;
@@ -329,14 +525,14 @@ export component AppWindow inherits Window {
 
     function reset-view() {
         root.zoom = 1.0;
-        root.pan-x = 24.0;
-        root.pan-y = 24.0;
+        root.pan-x = 120.0;
+        root.pan-y = 96.0;
     }
 
     function fit-view() {
         root.zoom = root.fit-target-zoom;
-        root.pan-x = Math.max(24.0, (root.viewport-width - root.canvas-width * root.zoom) / 2.0);
-        root.pan-y = Math.max(24.0, (root.viewport-height - root.canvas-height * root.zoom) / 2.0);
+        root.pan-x = (root.viewport-width - root.canvas-width * root.zoom) / 2.0;
+        root.pan-y = (root.viewport-height - root.canvas-height * root.zoom) / 2.0;
     }
 
     function toggle-view-mode() {
@@ -348,8 +544,12 @@ export component AppWindow inherits Window {
     }
 
     function zoom-at(anchor-x: float, anchor-y: float, delta: float) {
+        root.set-zoom-at(anchor-x, anchor-y, root.zoom + delta);
+    }
+
+    function set-zoom-at(anchor-x: float, anchor-y: float, requested-zoom: float) {
         let old-zoom = root.zoom;
-        let new-zoom = Math.max(0.35, Math.min(2.6, root.zoom + delta));
+        let new-zoom = Math.max(0.12, Math.min(4.0, requested-zoom));
         let canvas-x = (anchor-x - root.pan-x) / old-zoom;
         let canvas-y = (anchor-y - root.pan-y) / old-zoom;
         root.zoom = new-zoom;
@@ -370,8 +570,26 @@ export component AppWindow inherits Window {
     function zoom-in() { root.zoom-at(root.viewport-width / 2.0, root.viewport-height / 2.0, 0.1); }
     function zoom-out() { root.zoom-at(root.viewport-width / 2.0, root.viewport-height / 2.0, -0.1); }
 
+    function scroll-canvas(delta-x: float, delta-y: float) {
+        root.pan-x += delta-x;
+        root.pan-y += delta-y;
+    }
+
+    function handle-canvas-scroll(anchor-x: float, anchor-y: float, delta-x: float, delta-y: float, is-zoom-gesture: bool) {
+        if (root.is-macos) {
+            if (is-zoom-gesture) {
+                root.zoom-at(anchor-x, anchor-y, Math.max(-0.16, Math.min(0.16, delta-y / 420.0)));
+            } else {
+                root.scroll-canvas(delta-x, delta-y);
+            }
+        } else {
+            root.zoom-at-platform(anchor-x, anchor-y, delta-y);
+        }
+    }
+
     function select-node(index: int) {
         root.selected-index = index;
+        root.selected-content-scroll = 0.0;
         if (index >= 0) {
             root.edit-node-id = root.nodes[index].id;
             root.edit-label = root.nodes[index].editable_label;
@@ -380,6 +598,13 @@ export component AppWindow inherits Window {
             root.edit-node-id = "";
             root.edit-label = "";
             root.edit-text = "";
+        }
+    }
+
+    function scroll-selected-node(delta-y: float) {
+        if (root.selected-index >= 0) {
+            let max-scroll = root.nodes[root.selected-index].content_scroll_max;
+            root.selected-content-scroll = Math.max(0.0, Math.min(max-scroll, root.selected-content-scroll + delta-y / Math.max(0.35, root.zoom)));
         }
     }
 
@@ -509,10 +734,31 @@ export component AppWindow inherits Window {
             padding: 0px;
 
             Rectangle {
-                background: #dfe8e2;
+                background: @linear-gradient(135deg, #edf5ef 0%, #f7faf7 48%, #e4eee8 100%);
                 clip: true;
 
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    background: #ffffff36;
+                }
+
+                pinch := ScaleRotateGestureHandler {
+                    width: parent.width;
+                    height: parent.height;
+                    started => {
+                        root.pinch-start-zoom = root.zoom;
+                    }
+                    updated => {
+                        root.set-zoom-at(self.center.x / 1px, self.center.y / 1px, root.pinch-start-zoom * self.scale);
+                    }
+                }
+
                 pan-touch := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
                     pointer-event(event) => {
                         if ((event.button == PointerEventButton.left || event.button == PointerEventButton.middle) && event.kind == PointerEventKind.down) {
                             root.file-menu-open = false;
@@ -527,7 +773,13 @@ export component AppWindow inherits Window {
                     }
 
                     scroll-event(event) => {
-                        root.zoom-at-platform(pan-touch.mouse-x / 1px, pan-touch.mouse-y / 1px, event.delta-y / 1px);
+                        root.handle-canvas-scroll(
+                            pan-touch.mouse-x / 1px,
+                            pan-touch.mouse-y / 1px,
+                            event.delta-x / 1px,
+                            event.delta-y / 1px,
+                            event.modifiers.control
+                        );
                         accept
                     }
                 }
@@ -537,9 +789,8 @@ export component AppWindow inherits Window {
                     y: root.pan-y * 1px;
                     width: root.canvas-width * root.zoom * 1px;
                     height: root.canvas-height * root.zoom * 1px;
-                    background: #f9fbfa;
-                    border-width: 1px;
-                    border-color: #c9d7d0;
+                    background: transparent;
+                    border-width: 0px;
 
                     for node[i] in root.nodes: Rectangle {
                         visible: node.is_group && root.rect-visible(node.x, node.y, node.width, node.height);
@@ -551,13 +802,24 @@ export component AppWindow inherits Window {
                         border-radius: 7px;
                         border-width: self.selected ? 2px : 1px;
                         border-color: self.selected ? #25312bcc : #d8e2ddaa;
-                        background: node.color;
-                        opacity: self.selected ? 1.0 : 0.62;
+                        background: transparent;
+                        opacity: self.selected ? 1.0 : 0.72;
                         drop-shadow-color: self.selected ? #11181666 : #00000000;
                         drop-shadow-blur: self.selected ? 22px : 0px;
                         drop-shadow-offset-x: 0px;
                         drop-shadow-offset-y: self.selected ? 10px : 2px;
                         drop-shadow-spread: 0px;
+
+                        Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: parent.height;
+                            border-radius: 7px;
+                            background: node.color;
+                            opacity: root.selected-index == i ? 0.92 : 0.8;
+                        }
+
                         Rectangle {
                             visible: !root.show-node-titles || node.title == "";
                             x: 0px;
@@ -590,15 +852,14 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        if node.kind == "text" && root.content-detail-enabled: StyledText {
+                        if node.kind == "text" && root.content-detail-enabled: MarkdownPreview {
                             x: 12px * root.zoom;
                             y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(28.0, 42.0 * root.zoom) : 0.0)) * 1px;
                             width: parent.width - 24px * root.zoom;
                             height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(28.0, 42.0 * root.zoom) : 0.0)) * 1px;
-                            text: node.markdown;
-                            default-color: node.text_color;
-                            link-color: #1559c7;
-                            default-font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
+                            blocks: node.markdown_blocks;
+                            text-color: node.text_color;
+                            zoom-factor: root.zoom;
                         }
 
                         if node.kind != "text" && node.label != "" && root.content-detail-enabled: Text {
@@ -663,6 +924,17 @@ export component AppWindow inherits Window {
                                 if (root.is-panning && event.kind == PointerEventKind.move) {
                                     root.update-pan(pointer-x, pointer-y);
                                 }
+                            }
+
+                            scroll-event(event) => {
+                                root.handle-canvas-scroll(
+                                    root.pan-x + node.x * root.zoom + group-touch.mouse-x / 1px,
+                                    root.pan-y + node.y * root.zoom + group-touch.mouse-y / 1px,
+                                    event.delta-x / 1px,
+                                    event.delta-y / 1px,
+                                    event.modifiers.control
+                                );
+                                accept
                             }
                         }
                     }
@@ -768,12 +1040,23 @@ export component AppWindow inherits Window {
                         border-radius: 7px;
                         border-width: self.selected ? 2px : 1px;
                         border-color: self.selected ? #25312bcc : #bac9c2;
-                        background: node.color;
+                        background: transparent;
                         drop-shadow-color: self.selected ? #11181666 : (root.performance-mode ? #00000000 : #17231e22);
                         drop-shadow-blur: self.selected ? 22px : (root.performance-mode ? 0px : 6px);
                         drop-shadow-offset-x: 0px;
                         drop-shadow-offset-y: self.selected ? 10px : 5px;
                         drop-shadow-spread: 0px;
+
+                        Rectangle {
+                            x: 0px;
+                            y: 0px;
+                            width: parent.width;
+                            height: parent.height;
+                            border-radius: 7px;
+                            background: node.color;
+                            opacity: root.selected-index == i ? 0.92 : 0.8;
+                        }
+
                         Rectangle {
                             visible: !root.show-node-titles || node.title == "";
                             x: 0px;
@@ -806,15 +1089,15 @@ export component AppWindow inherits Window {
                             }
                         }
 
-                        if node.kind == "text" && root.content-detail-enabled: StyledText {
+                        if node.kind == "text" && root.content-detail-enabled: MarkdownPreview {
                             x: 12px * root.zoom;
                             y: (18.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
                             width: parent.width - 24px * root.zoom;
                             height: parent.height - (26.0 * root.zoom + (root.show-node-titles && node.title != "" ? Math.max(14.0, 28.0 * root.zoom) : 0.0)) * 1px;
-                            text: node.markdown;
-                            default-color: node.text_color;
-                            link-color: #1559c7;
-                            default-font-size: Math.max(10.0, 14.0 * root.zoom) * 1px;
+                            blocks: node.markdown_blocks;
+                            text-color: node.text_color;
+                            zoom-factor: root.zoom;
+                            scroll-offset: root.selected-index == i ? root.selected-content-scroll : 0.0;
                         }
 
                         if node.kind != "text" && node.label != "" && root.content-detail-enabled: Text {
@@ -879,6 +1162,21 @@ export component AppWindow inherits Window {
                                 if (root.is-panning && event.kind == PointerEventKind.move) {
                                     root.update-pan(pointer-x, pointer-y);
                                 }
+                            }
+
+                            scroll-event(event) => {
+                                if (root.selected-index == i && node.kind == "text" && node.content_scroll_max > 0.0 && !event.modifiers.control) {
+                                    root.scroll-selected-node(event.delta-y / 1px);
+                                } else {
+                                    root.handle-canvas-scroll(
+                                        root.pan-x + node.x * root.zoom + node-touch.mouse-x / 1px,
+                                        root.pan-y + node.y * root.zoom + node-touch.mouse-y / 1px,
+                                        event.delta-x / 1px,
+                                        event.delta-y / 1px,
+                                        event.modifiers.control
+                                    );
+                                }
+                                accept
                             }
                         }
                     }
@@ -1081,8 +1379,17 @@ export component AppWindow inherits Window {
 
             Rectangle {
                 width: root.inspector-width * 1px;
-                background: #fbfdfc;
+                background: #f7fbf8;
                 border-width: 0px;
+                clip: true;
+
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: 1px;
+                    height: parent.height;
+                    background: #c7d8cf;
+                }
 
                 if root.inspector-collapsed: VerticalLayout {
                     padding: 4px;
@@ -1098,7 +1405,7 @@ export component AppWindow inherits Window {
 
                 if !root.inspector-collapsed: VerticalLayout {
                     padding: 18px;
-                    spacing: 13px;
+                    spacing: 12px;
 
                     HorizontalLayout {
                         spacing: 10px;
@@ -1106,7 +1413,7 @@ export component AppWindow inherits Window {
                         Text {
                             text: "Inspector";
                             color: #17231e;
-                            font-size: 18px;
+                            font-size: 26px;
                             font-weight: 800;
                             vertical-alignment: center;
                         }
@@ -1133,10 +1440,11 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             height: 82px;
-                            border-radius: 8px;
-                            background: #f3f7f5;
+                            border-radius: 14px;
+                            background: #edf5f1;
                             border-width: 1px;
-                            border-color: #dce7e1;
+                            border-color: #cfe1d8;
+                            clip: true;
 
                             Rectangle {
                                 x: 10px;
@@ -1154,7 +1462,7 @@ export component AppWindow inherits Window {
                                 y: 8px;
                                 width: parent.width - 48px;
                                 height: 24px;
-                                text: root.nodes[root.selected-index].title != "" ? root.nodes[root.selected-index].title : root.nodes[root.selected-index].label;
+                                text: root.edit-label != "" ? root.edit-label : root.nodes[root.selected-index].kind + " node";
                                 color: #17231e;
                                 font-size: 15px;
                                 font-weight: 850;
@@ -1186,10 +1494,10 @@ export component AppWindow inherits Window {
 
                         Rectangle {
                             height: 68px;
-                            border-radius: 7px;
-                            background: #f3f7f5;
+                            border-radius: 14px;
+                            background: #f1f7f4;
                             border-width: 1px;
-                            border-color: #dce7e1;
+                            border-color: #cfe1d8;
 
                             Text {
                                 x: 10px;
@@ -1212,11 +1520,11 @@ export component AppWindow inherits Window {
                         }
 
                         Rectangle {
-                            height: 174px;
-                            border-radius: 7px;
-                            background: #f3f7f5;
+                            height: Math.max(174.0, root.viewport-height - 420.0) * 1px;
+                            border-radius: 14px;
+                            background: #f1f7f4;
                             border-width: 1px;
-                            border-color: #dce7e1;
+                            border-color: #cfe1d8;
 
                             Text {
                                 x: 10px;
@@ -1231,7 +1539,7 @@ export component AppWindow inherits Window {
                                 x: 10px;
                                 y: 28px;
                                 width: parent.width - 20px;
-                                height: 136px;
+                                height: parent.height - 38px;
                                 text: root.edit-text;
                                 font-size: 12px;
                                 edited(text) => { root.edit-text = text; }
